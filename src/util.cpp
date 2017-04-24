@@ -385,13 +385,13 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
 
 /**
  * Adjust the value for special cases such as negative settings, and handle
- * -readconfig arguments.
+ * -addconf arguments.
  * @param  strKey   By-reference key
  * @param  strValue By-reference value
  */
 static void ProcessSetting(std::string& strKey, std::string& strValue)
 {
-    if (strKey == "-readconfig") {
+    if (strKey == "-addconf") {
         strValue = GetConfigFile(strValue).string();
         auto& loaded = _mapMultiArgs[strValue];
         if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
