@@ -383,6 +383,25 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
     }
 }
 
+/**
+ * Adjust the value for special cases such as negative settings, and handle
+ * -readconfig arguments.
+ * @param  strKey   By-reference key
+ * @param  strValue By-reference value
+ */
+static void ProcessSetting(std::string& strKey, std::string& strValue)
+{
+    if (strKey == "-readconfig") {
+        strValue = GetConfigFile(strValue).string();
+        auto& loaded = _mapMultiArgs[strValue];
+        if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
+            loaded.push_back(strValue); // we get two entries; ugly but harmless
+            ReadConfigFile(strValue, true);
+        }
+    }
+    InterpretNegativeSetting(strKey, strValue);
+}
+
 void ArgsManager::ParseParameters(int argc, const char* const argv[])
 {
     LOCK(cs_args);
@@ -407,12 +426,11 @@ void ArgsManager::ParseParameters(int argc, const char* const argv[])
 
         if (str[0] != '-')
             break;
-
         // Interpret --foo as -foo.
         // If both --foo and -foo are set, the last takes effect.
         if (str.length() > 1 && str[1] == '-')
             str = str.substr(1);
-        InterpretNegativeSetting(str, strValue);
+        ProcessSetting(str, strValue);
 
         mapArgs[str] = strValue;
         mapMultiArgs[str].push_back(strValue);
@@ -598,11 +616,16 @@ fs::path GetConfigFile(const std::string& confPath)
     return pathConfigFile;
 }
 
-void ArgsManager::ReadConfigFile(const std::string& confPath)
+void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure)
 {
     fs::ifstream streamConfig(GetConfigFile(confPath));
-    if (!streamConfig.good())
+    if (!streamConfig.good()) {
+        if (warnOnFailure) {
+            LogPrintf("Unable to read config file: %s\n", confPath.c_str());
+            fprintf(stderr, "Unable to read config file: %s\n", confPath.c_str()); // We may be behind -printtoconsole, so we print to stderr too.
+        }
         return; // No bitcoin.conf file is OK
+    }
 
     {
         LOCK(cs_args);
@@ -614,7 +637,7 @@ void ArgsManager::ReadConfigFile(const std::string& confPath)
             // Don't overwrite existing settings so command line settings override bitcoin.conf
             std::string strKey = std::string("-") + it->string_key;
             std::string strValue = it->value[0];
-            InterpretNegativeSetting(strKey, strValue);
+            ProcessSetting(strKey, strValue);
             if (mapArgs.count(strKey) == 0)
                 mapArgs[strKey] = strValue;
             mapMultiArgs[strKey].push_back(strValue);
