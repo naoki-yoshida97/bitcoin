@@ -385,14 +385,15 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
 
 /**
  * Adjust the value for special cases such as negative settings, and handle
- * -addconf arguments.
- * @param  strKey   By-reference key
- * @param  strValue By-reference value
+ * -includeconf arguments.
+ * @param  strKey       By-reference key
+ * @param  strValue     By-reference value
+ * @param  relativePath Path to base the location of the config file, for -includeconf
  */
-static void ProcessSetting(std::string& strKey, std::string& strValue)
+static void ProcessSetting(std::string& strKey, std::string& strValue, std::string relativePath = "")
 {
-    if (strKey == "-addconf") {
-        strValue = GetConfigFile(strValue).string();
+    if (strKey == "-includeconf") {
+        strValue = GetConfigFile(strValue, relativePath).string();
         auto& loaded = _mapMultiArgs[strValue];
         if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
             loaded.push_back(strValue); // we get two entries; ugly but harmless
@@ -607,18 +608,21 @@ void ClearDatadirCache()
     pathCachedNetSpecific = fs::path();
 }
 
-fs::path GetConfigFile(const std::string& confPath)
+fs::path GetConfigFile(const std::string& confPath, const std::string relativePath)
 {
     fs::path pathConfigFile(confPath);
-    if (!pathConfigFile.is_complete())
-        pathConfigFile = GetDataDir(false) / pathConfigFile;
+    if (!pathConfigFile.is_complete()) {
+        fs::path basePath = relativePath == "" ? GetDataDir(false) : fs::path(relativePath);
+        pathConfigFile = fs::canonical(pathConfigFile, basePath);
+    }
 
     return pathConfigFile;
 }
 
 void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure)
 {
-    fs::ifstream streamConfig(GetConfigFile(confPath));
+    fs::path configFile = GetConfigFile(confPath);
+    fs::ifstream streamConfig(configFile);
     if (!streamConfig.good()) {
         if (warnOnFailure) {
             LogPrintf("Unable to read config file: %s\n", confPath.c_str());
@@ -629,6 +633,7 @@ void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure
 
     {
         LOCK(cs_args);
+        std::string relativePath = configFile.parent_path().string();
         std::set<std::string> setOptions;
         setOptions.insert("*");
 
@@ -637,7 +642,7 @@ void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure
             // Don't overwrite existing settings so command line settings override bitcoin.conf
             std::string strKey = std::string("-") + it->string_key;
             std::string strValue = it->value[0];
-            ProcessSetting(strKey, strValue);
+            ProcessSetting(strKey, strValue, relativePath);
             if (mapArgs.count(strKey) == 0)
                 mapArgs[strKey] = strValue;
             mapMultiArgs[strKey].push_back(strValue);
