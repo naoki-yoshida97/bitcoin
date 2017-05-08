@@ -33,7 +33,7 @@ class IncludeConfTest(BitcoinTestFramework):
         self.num_nodes = 1
 
     def setup_network(self):
-        self.nodes = self.setup_nodes()
+        self.setup_nodes()
 
     def run_test (self):
         '''
@@ -46,7 +46,7 @@ class IncludeConfTest(BitcoinTestFramework):
 
         nwinfo = self.nodes[0].getnetworkinfo()
         subversion = nwinfo["subversion"]
-        assert subversion.endswith("(main; relative; global; globrel)/")
+        assert subversion.endswith("main; relative; global; globrel)/")
 
 if __name__ == '__main__':
     IncludeConfTest().main()
