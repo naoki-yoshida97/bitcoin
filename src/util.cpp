@@ -397,7 +397,7 @@ static void ProcessSetting(std::string& strKey, std::string& strValue, std::stri
         auto& loaded = _mapMultiArgs[strValue];
         if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
             loaded.push_back(strValue); // we get two entries; ugly but harmless
-            ReadConfigFile(strValue, true);
+            ReadConfigFile(strValue, true, false);
         }
     }
     InterpretNegativeSetting(strKey, strValue);
@@ -619,7 +619,24 @@ fs::path GetConfigFile(const std::string& confPath, const std::string relativePa
     return pathConfigFile;
 }
 
-void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure)
+void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig, const std::string& relativePath)
+{
+    std::set<std::string> setOptions;
+    setOptions.insert("*");
+
+    for (boost::program_options::detail::config_file_iterator it(streamConfig, setOptions), end; it != end; ++it) {
+        // Don't overwrite existing settings so command line settings override bitcoin.conf
+        std::string strKey = std::string("-") + it->string_key;
+        std::string strValue = it->value[0];
+        ProcessSetting(strKey, strValue, relativePath);
+        if (mapArgs.count(strKey) == 0) {
+            mapArgs[strKey] = strValue;
+        }
+        mapMultiArgs[strKey].push_back(strValue);
+    }
+}
+
+void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure, bool lockAndClear)
 {
     fs::path configFile = GetConfigFile(confPath);
     fs::ifstream streamConfig(configFile);
@@ -631,25 +648,17 @@ void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure
         return; // No bitcoin.conf file is OK
     }
 
-    {
-        LOCK(cs_args);
-        std::string relativePath = configFile.parent_path().string();
-        std::set<std::string> setOptions;
-        setOptions.insert("*");
-
-        for (boost::program_options::detail::config_file_iterator it(streamConfig, setOptions), end; it != end; ++it)
+    std::string relativePath = configFile.parent_path().string();
+    if (lockAndClear) {
         {
-            // Don't overwrite existing settings so command line settings override bitcoin.conf
-            std::string strKey = std::string("-") + it->string_key;
-            std::string strValue = it->value[0];
-            ProcessSetting(strKey, strValue, relativePath);
-            if (mapArgs.count(strKey) == 0)
-                mapArgs[strKey] = strValue;
-            mapMultiArgs[strKey].push_back(strValue);
+            LOCK(cs_args);
+            ReadConfigStream(streamConfig, relativePath);
         }
+        // If datadir is changed in .conf file:
+        ClearDatadirCache();
+    } else {
+        ReadConfigStream(streamConfig, relativePath);
     }
-    // If datadir is changed in .conf file:
-    ClearDatadirCache();
 }
 
 #ifndef WIN32
