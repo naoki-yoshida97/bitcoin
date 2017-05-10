@@ -875,10 +875,12 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFlushOnClose)
 
     uint256 hash = wtxIn.GetHash();
 
-    // Mark used destinations as dirty
-    for (const CTxIn& txin : wtxIn.tx->vin) {
-        const COutPoint& op = txin.prevout;
-        SetDirtyState(op.hash, op.n, true);
+    if (GetBoolArg("-avoidreuse", false)) {
+        // Mark used destinations as dirty
+        for (const CTxIn& txin : wtxIn.tx->vin) {
+            const COutPoint& op = txin.prevout;
+            SetDirtyState(op.hash, op.n, true);
+        }
     }
 
     // Inserts only if not already there, returns tx inserted or tx found
@@ -2015,6 +2017,7 @@ CAmount CWallet::GetLegacyBalance(const isminefilter& filter, int minDepth, cons
 void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t &nMaximumCount, const int &nMinDepth, const int &nMaxDepth) const
 {
     vCoins.clear();
+    bool fAllowDirtyAddresses = !GetBoolArg("-avoidreuse", false) || (coinControl && coinControl->fAllowDirtyAddresses);
 
     {
         LOCK2(cs_main, cs_wallet);
@@ -2100,7 +2103,7 @@ void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const
                     continue;
                 }
 
-                if ((!coinControl || !coinControl->fAllowDirtyAddresses) && IsDirty(wtxid, i)) {
+                if (!fAllowDirtyAddresses && IsDirty(wtxid, i)) {
                     continue;
                 }
 
