@@ -22,6 +22,8 @@ public:
     CAmount nMinimumTotalFee;
     //! Override estimated feerate
     bool fOverrideFeeRate;
+    //! Allows inclusion of dirty (previously used) addresses
+    bool fAllowDirtyAddresses;
     //! Feerate to use if overrideFeeRate is true
     CFeeRate nFeeRate;
     //! Override the default confirmation target, 0 = use default
@@ -39,6 +41,7 @@ public:
         destChange = CNoDestination();
         fAllowOtherInputs = false;
         fAllowWatchOnly = false;
+        fAllowDirtyAddresses = false;
         setSelected.clear();
         nMinimumTotalFee = 0;
         nFeeRate = CFeeRate(0);
