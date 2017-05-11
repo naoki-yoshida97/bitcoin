@@ -844,6 +844,7 @@ void CWallet::SetDirtyState(const uint256& hash, unsigned int n, bool dirty)
     if (srctx) {
         CTxDestination dst;
         if (ExtractDestination(srctx->tx->vout[n].scriptPubKey, dst)) {
+            AssertLockHeld(cs_wallet);
             if (::IsMine(*this, dst)) {
                 if (dirty && !GetDestData(dst, "dirty", NULL)) {
                     AddDestData(dst, "dirty", "p"); // p for "present", opposite of absent (null)
@@ -861,6 +862,7 @@ bool CWallet::IsDirty(const uint256& hash, unsigned int n) const
     if (srctx) {
         CTxDestination dst;
         if (ExtractDestination(srctx->tx->vout[n].scriptPubKey, dst)) {
+            AssertLockHeld(cs_wallet);
             return ::IsMine(*this, dst) && GetDestData(dst, "dirty", NULL);
         }
     }
@@ -875,7 +877,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, bool fFlushOnClose)
 
     uint256 hash = wtxIn.GetHash();
 
-    if (GetBoolArg("-avoidreuse", false)) {
+    if (GetBoolArg("-avoidreuse", DEFAULT_AVOIDREUSE)) {
         // Mark used destinations as dirty
         for (const CTxIn& txin : wtxIn.tx->vin) {
             const COutPoint& op = txin.prevout;
@@ -2017,7 +2019,7 @@ CAmount CWallet::GetLegacyBalance(const isminefilter& filter, int minDepth, cons
 void CWallet::AvailableCoins(std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t &nMaximumCount, const int &nMinDepth, const int &nMaxDepth) const
 {
     vCoins.clear();
-    bool fAllowDirtyAddresses = !GetBoolArg("-avoidreuse", false) || (coinControl && coinControl->fAllowDirtyAddresses);
+    bool fAllowDirtyAddresses = !GetBoolArg("-avoidreuse", DEFAULT_AVOIDREUSE) || (coinControl && coinControl->fAllowDirtyAddresses);
 
     {
         LOCK2(cs_main, cs_wallet);
@@ -3676,7 +3678,7 @@ std::string CWallet::GetWalletHelpString(bool showDebug)
     strUsage += HelpMessageOpt("-walletnotify=<cmd>", _("Execute command when a wallet transaction changes (%s in cmd is replaced by TxID)"));
     strUsage += HelpMessageOpt("-zapwallettxes=<mode>", _("Delete all wallet transactions and only recover those parts of the blockchain through -rescan on startup") +
                                " " + _("(1 = keep tx meta data e.g. account owner and payment request information, 2 = drop tx meta data)"));
-    strUsage += HelpMessageOpt("-avoidreuse", _("Mark addresses which have been used to fund transactions in the past, and avoid reusing these in future funding, except when explicitly requested"));
+    strUsage += HelpMessageOpt("-avoidreuse", _("Mark addresses which have been used to fund transactions in the past, and avoid reusing these in future funding, except when explicitly requested") + " " + strprintf(_("(default: %u)"), DEFAULT_AVOIDREUSE));
 
     if (showDebug)
     {

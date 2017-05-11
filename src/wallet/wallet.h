@@ -64,6 +64,8 @@ static const bool DEFAULT_WALLETBROADCAST = true;
 static const bool DEFAULT_DISABLE_WALLET = false;
 //! if set, all keys will be derived by using BIP32
 static const bool DEFAULT_USE_HD_WALLET = true;
+//! if set, addresses will be marked dirty once spent from, and will be excluded from future coin selects
+static const bool DEFAULT_AVOIDREUSE = false;
 
 extern const char * DEFAULT_WALLET_DAT;
 

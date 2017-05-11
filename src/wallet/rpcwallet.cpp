@@ -419,7 +419,7 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
             "                             transaction, just kept in your wallet.\n"
             "5. subtractfeefromamount  (boolean, optional, default=false) The fee will be deducted from the amount being sent.\n"
             "                             The recipient will receive less bitcoins than you enter in the amount field.\n"
-            "6. allowdirty             (boolean, optional, " + (GetBoolArg("-avoidreuse", false) ? "default=false" : "unavailable") + ") Allows spending from dirty addresses; addresses are considered\n"
+            "6. allowdirty             (boolean, optional, " + (GetBoolArg("-avoidreuse", DEFAULT_AVOIDREUSE) ? std::string("default=") + (DEFAULT_AVOIDREUSE ? "true" : "false") : "unavailable") + ") Allows spending from dirty addresses; addresses are considered\n"
             "                             dirty if they have previously been used in a transaction.\n"
             "\nResult:\n"
             "\"txid\"                  (string) The transaction id.\n"
