@@ -62,7 +62,7 @@ class AvoidReuseTest(BitcoinTestFramework):
         self.sync_all()
         self.nodes[0].generate(1)
 
-        assert_raises_jsonrpc(-4, "Insufficient funds", self.nodes[1].sendtoaddress, retaddr, 10)
+        assert_raises_jsonrpc(-6, "Insufficient funds", self.nodes[1].sendtoaddress, retaddr, 10)
 
         self.nodes[1].sendtoaddress(retaddr, 4)
 

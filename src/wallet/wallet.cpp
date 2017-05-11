@@ -1699,6 +1699,7 @@ CAmount CWalletTx::GetImmatureCredit(bool fUseCache) const
 
 CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
 {
+    bool fAllowDirtyAddresses = !GetBoolArg("-avoidreuse", DEFAULT_AVOIDREUSE);
     if (pwallet == 0)
         return 0;
 
@@ -1713,7 +1714,7 @@ CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
     uint256 hashTx = GetHash();
     for (unsigned int i = 0; i < tx->vout.size(); i++)
     {
-        if (!pwallet->IsSpent(hashTx, i))
+        if (!pwallet->IsSpent(hashTx, i) && (fAllowDirtyAddresses || !pwallet->IsDirty(hashTx, i)))
         {
             const CTxOut &txout = tx->vout[i];
             nCredit += pwallet->GetCredit(txout, ISMINE_SPENDABLE);
