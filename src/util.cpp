@@ -383,18 +383,11 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
     }
 }
 
-/**
- * Adjust the value for special cases such as negative settings, and handle
- * -includeconf arguments.
- * @param  strKey       By-reference key
- * @param  strValue     By-reference value
- * @param  relativePath Path to base the location of the config file, for -includeconf
- */
-static void ProcessSetting(std::string& strKey, std::string& strValue, std::string relativePath = "")
+void ArgsManager::ProcessSetting(std::string& strKey, std::string& strValue, std::string relativePath)
 {
     if (strKey == "-includeconf") {
         strValue = GetConfigFile(strValue, relativePath).string();
-        auto& loaded = _mapMultiArgs[strValue];
+        auto& loaded = mapMultiArgs[strValue];
         if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
             loaded.push_back(strValue); // we get two entries; ugly but harmless
             ReadConfigFile(strValue, true, false);
