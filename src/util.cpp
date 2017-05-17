@@ -593,7 +593,12 @@ fs::path GetConfigFile(const std::string& confPath, const std::string relativePa
     fs::path pathConfigFile(confPath);
     if (!pathConfigFile.is_complete()) {
         fs::path basePath = relativePath == "" ? GetDataDir(false) : fs::path(relativePath);
-        pathConfigFile = fs::canonical(pathConfigFile, basePath);
+        try {
+            pathConfigFile = fs::canonical(pathConfigFile, basePath);
+        } catch (std::exception& e) {
+            // pathConfigFile is probably not a valid path
+            pathConfigFile = fs::path(confPath);
+        }
     }
 
     return pathConfigFile;
