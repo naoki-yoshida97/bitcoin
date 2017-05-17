@@ -383,19 +383,6 @@ static void InterpretNegativeSetting(std::string& strKey, std::string& strValue)
     }
 }
 
-void ArgsManager::ProcessSetting(std::string& strKey, std::string& strValue, std::string relativePath)
-{
-    if (strKey == "-includeconf") {
-        strValue = GetConfigFile(strValue, relativePath).string();
-        auto& loaded = mapMultiArgs[strValue];
-        if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
-            loaded.push_back(strValue); // we get two entries; ugly but harmless
-            ReadConfigFile(strValue, false);
-        }
-    }
-    InterpretNegativeSetting(strKey, strValue);
-}
-
 void ArgsManager::ParseParameters(int argc, const char* const argv[])
 {
     LOCK(cs_args);
@@ -424,7 +411,7 @@ void ArgsManager::ParseParameters(int argc, const char* const argv[])
         // If both --foo and -foo are set, the last takes effect.
         if (str.length() > 1 && str[1] == '-')
             str = str.substr(1);
-        ProcessSetting(str, strValue);
+        InterpretNegativeSetting(str, strValue);
 
         mapArgs[str] = strValue;
         mapMultiArgs[str].push_back(strValue);
@@ -612,7 +599,7 @@ fs::path GetConfigFile(const std::string& confPath, const std::string relativePa
     return pathConfigFile;
 }
 
-void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig, const std::string& relativePath)
+void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig)
 {
     std::set<std::string> setOptions;
     setOptions.insert("*");
@@ -621,7 +608,7 @@ void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig, const std::string
         // Don't overwrite existing settings so command line settings override bitcoin.conf
         std::string strKey = std::string("-") + it->string_key;
         std::string strValue = it->value[0];
-        ProcessSetting(strKey, strValue, relativePath);
+        InterpretNegativeSetting(strKey, strValue);
         if (mapArgs.count(strKey) == 0) {
             mapArgs[strKey] = strValue;
         }
@@ -629,7 +616,7 @@ void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig, const std::string
     }
 }
 
-void ArgsManager::ReadConfigFile(const std::string& confPath, bool lockAndClear)
+void ArgsManager::ReadConfigFile(const std::string& confPath)
 {
     fs::path configFile = GetConfigFile(confPath);
     fs::ifstream streamConfig(configFile);
@@ -637,17 +624,20 @@ void ArgsManager::ReadConfigFile(const std::string& confPath, bool lockAndClear)
         return; // No bitcoin.conf file is OK
     }
 
-    std::string relativePath = configFile.parent_path().string();
-    if (lockAndClear) {
-        {
-            LOCK(cs_args);
-            ReadConfigStream(streamConfig, relativePath);
+    {
+        LOCK(cs_args);
+        ReadConfigStream(streamConfig);
+        if (mapArgs.count("-includeconf")) {
+            std::string relativePath = configFile.parent_path().string();
+            fs::path includeFile = GetConfigFile(mapArgs["-includeconf"], relativePath);
+            fs::ifstream includeConfig(includeFile);
+            if (includeConfig.good()) {
+                ReadConfigStream(includeConfig);
+            }
         }
-        // If datadir is changed in .conf file:
-        ClearDatadirCache();
-    } else {
-        ReadConfigStream(streamConfig, relativePath);
     }
+    // If datadir is changed in .conf file:
+    ClearDatadirCache();
 }
 
 #ifndef WIN32

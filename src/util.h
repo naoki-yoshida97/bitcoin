@@ -195,22 +195,14 @@ inline bool IsSwitchChar(char c)
 class ArgsManager
 {
 private:
-    /**
-     * Adjust the value for special cases such as negative settings, and handle
-     * -includeconf arguments.
-     * @param  strKey       By-reference key
-     * @param  strValue     By-reference value
-     * @param  relativePath Path to base the location of the config file, for -includeconf
-     */
-    void ProcessSetting(std::string& strKey, std::string& strValue, std::string relativePath = "");
-    void ReadConfigStream(fs::ifstream& streamConfig, const std::string& relativePath);
+    void ReadConfigStream(fs::ifstream& streamConfig);
 protected:
     CCriticalSection cs_args;
     std::map<std::string, std::string> mapArgs;
     std::map<std::string, std::vector<std::string> > mapMultiArgs;
 public:
     void ParseParameters(int argc, const char*const argv[]);
-    void ReadConfigFile(const std::string& confPath, bool lockAndClear = true);
+    void ReadConfigFile(const std::string& confPath);
     std::vector<std::string> GetArgs(const std::string& strArg);
 
     /**
