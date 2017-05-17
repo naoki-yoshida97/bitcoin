@@ -6,26 +6,19 @@
 
 import os
 from test_framework.test_framework import BitcoinTestFramework
-# from test_framework.util import assert_equal
+from test_framework.util import start_node
 
 class IncludeConfTest(BitcoinTestFramework):
 
     def setup_chain(self):
         super().setup_chain()
-        # Create additional config files
+        # Create additional config file
         # - tmpdir/node0/relative.conf
         with open(os.path.join(self.options.tmpdir+"/node0", "relative.conf"), "w", encoding="utf8") as f:
-            f.write("uacomment=relative\nincludeconf=../global.conf\n")
-        # - tmpdir/global.conf
-        with open(os.path.join(self.options.tmpdir, "global.conf"), "w", encoding="utf8") as f:
-            f.write("uacomment=global\nincludeconf=globrel.conf\n")
-        # - tmpdir/globrel.conf (also has circular include into global.conf)
-        with open(os.path.join(self.options.tmpdir, "globrel.conf"), "w", encoding="utf8") as f:
-            f.write("uacomment=globrel\nincludeconf=global.conf")
-        # Append includeconf to bitcoin.conf before initialization
+            f.write("uacomment=relative\n")
         with open(os.path.join(self.options.tmpdir+"/node0", "bitcoin.conf"), 'a', encoding='utf8') as f:
             f.write("uacomment=main\nincludeconf=relative.conf\n")
-        # subversion should end with "(main; relative; global; globrel)/"
+        # subversion should end with "(main; relative)/"
 
     def __init__(self):
         super().__init__()
@@ -37,16 +30,19 @@ class IncludeConfTest(BitcoinTestFramework):
 
     def run_test (self):
         '''
-        Create a series of configuration files that load each other using
-        includeconf (done in setup_chain). We check that:
+        Create an additional configuration file that is loaded from the main
+        bitcoin.conf via includeconf (done in setup_chain). We check that:
         1. The files are indeed loaded.
         2. The load ordering is correct.
-        3. Circular includes are guarded against.
         '''
 
         nwinfo = self.nodes[0].getnetworkinfo()
         subversion = nwinfo["subversion"]
-        assert subversion.endswith("main; relative; global; globrel)/")
+        assert subversion.endswith("main; relative)/")
+
+        # Ensure bitcoin does not crash with an invalid conf file
+        node2 = start_node(2, self.options.tmpdir, ['-conf=::3243$#@'])
+        assert node2
 
 if __name__ == '__main__':
     IncludeConfTest().main()
