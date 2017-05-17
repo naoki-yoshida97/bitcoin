@@ -621,15 +621,18 @@ void ArgsManager::ReadConfigFile(const std::string& confPath)
     if (!streamConfig.good())
         return; // No bitcoin.conf file is OK
 
+    std::string includeconf;
     {
         LOCK(cs_args);
         ReadConfigStream(streamConfig);
-        if (mapArgs.count("-includeconf")) {
-            fs::path includeFile = GetConfigFile(mapArgs["-includeconf"]);
-            fs::ifstream includeConfig(includeFile);
-            if (includeConfig.good()) {
-                ReadConfigStream(includeConfig);
-            }
+        if (mapArgs.count("-includeconf")) includeconf = mapArgs["-includeconf"];
+    }
+    if (includeconf != "") {
+        fs::path includeFile = GetConfigFile(includeconf);
+        fs::ifstream includeConfig(includeFile);
+        if (includeConfig.good()) {
+            LOCK(cs_args);
+            ReadConfigStream(includeConfig);
         }
     }
     // If datadir is changed in .conf file:
