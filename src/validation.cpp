@@ -1788,8 +1788,8 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     uint32_t txOuts = 0;
     if (fEnforceBIP30) {
         for (const auto& tx : block.vtx) {
-            txIns += tx.vin.size();
-            txOuts += tx.vout.size();
+            txIns += tx->vin.size();
+            txOuts += tx->vout.size();
             const CCoins* coins = view.AccessCoins(tx->GetHash());
             if (coins && !coins->IsPruned())
                 return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
@@ -1797,8 +1797,8 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
         }
     } else {
         for (const auto& tx : block.vtx) {
-            txIns += tx.vin.size();
-            txOuts += tx.vout.size();
+            txIns += tx->vin.size();
+            txOuts += tx->vout.size();
         }
     }
 
