@@ -171,7 +171,7 @@ bool TryCreateDirectories(const fs::path& p);
 fs::path GetDefaultDataDir();
 const fs::path &GetDataDir(bool fNetSpecific = true);
 void ClearDatadirCache();
-fs::path GetConfigFile(const std::string& confPath, const std::string relativePath = "");
+fs::path GetConfigFile(const std::string& confPath);
 #ifndef WIN32
 fs::path GetPidFile();
 void CreatePidFile(const fs::path &path, pid_t pid);

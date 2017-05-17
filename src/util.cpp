@@ -407,6 +407,7 @@ void ArgsManager::ParseParameters(int argc, const char* const argv[])
 
         if (str[0] != '-')
             break;
+
         // Interpret --foo as -foo.
         // If both --foo and -foo are set, the last takes effect.
         if (str.length() > 1 && str[1] == '-')
@@ -588,18 +589,11 @@ void ClearDatadirCache()
     pathCachedNetSpecific = fs::path();
 }
 
-fs::path GetConfigFile(const std::string& confPath, const std::string relativePath)
+fs::path GetConfigFile(const std::string& confPath)
 {
     fs::path pathConfigFile(confPath);
-    if (!pathConfigFile.is_complete()) {
-        fs::path basePath = relativePath == "" ? GetDataDir(false) : fs::path(relativePath);
-        try {
-            pathConfigFile = fs::canonical(pathConfigFile, basePath);
-        } catch (std::exception& e) {
-            // pathConfigFile is probably not a valid path
-            pathConfigFile = fs::path(confPath);
-        }
-    }
+    if (!pathConfigFile.is_complete())
+        pathConfigFile = GetDataDir(false) / pathConfigFile;
 
     return pathConfigFile;
 }
@@ -623,18 +617,15 @@ void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig)
 
 void ArgsManager::ReadConfigFile(const std::string& confPath)
 {
-    fs::path configFile = GetConfigFile(confPath);
-    fs::ifstream streamConfig(configFile);
-    if (!streamConfig.good()) {
+    fs::ifstream streamConfig(GetConfigFile(confPath));
+    if (!streamConfig.good())
         return; // No bitcoin.conf file is OK
-    }
 
     {
         LOCK(cs_args);
         ReadConfigStream(streamConfig);
         if (mapArgs.count("-includeconf")) {
-            std::string relativePath = configFile.parent_path().string();
-            fs::path includeFile = GetConfigFile(mapArgs["-includeconf"], relativePath);
+            fs::path includeFile = GetConfigFile(mapArgs["-includeconf"]);
             fs::ifstream includeConfig(includeFile);
             if (includeConfig.good()) {
                 ReadConfigStream(includeConfig);
