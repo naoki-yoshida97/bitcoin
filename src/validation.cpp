@@ -1684,6 +1684,20 @@ static int64_t nTimeConnect = 0;
 static int64_t nTimeIndex = 0;
 static int64_t nTimeCallbacks = 0;
 static int64_t nTimeTotal = 0;
+static uint32_t kstati = 0;
+static FILE* kstats = NULL;
+struct ks_t {
+    int64_t blockTime;
+    uint32_t txs, ins, outs;
+};
+static inline void kstat(int64_t blockTime, uint32_t txs, uint32_t ins, uint32_t outs)
+{
+    if (!kstats) kstats = fopen("kstats.dat", "ab");
+    ks_t k{blockTime, txs, ins, outs};
+    fwrite(&k, sizeof(struct ks_t), 1, kstats);
+    kstati++;
+    if (kstati % 100 == 0) fflush(kstats);
+}
 
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
@@ -1769,14 +1783,26 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     //Only continue to enforce if we're below BIP34 activation height or the block hash at that height doesn't correspond.
     fEnforceBIP30 = fEnforceBIP30 && (!pindexBIP34height || !(pindexBIP34height->GetBlockHash() == chainparams.GetConsensus().BIP34Hash));
 
+    uint32_t txCount = block.vtx.size();
+    uint32_t txIns = 0;
+    uint32_t txOuts = 0;
     if (fEnforceBIP30) {
         for (const auto& tx : block.vtx) {
+            txIns += tx.vin.size();
+            txOuts += tx.vout.size();
             const CCoins* coins = view.AccessCoins(tx->GetHash());
             if (coins && !coins->IsPruned())
                 return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
                                  REJECT_INVALID, "bad-txns-BIP30");
         }
+    } else {
+        for (const auto& tx : block.vtx) {
+            txIns += tx.vin.size();
+            txOuts += tx.vout.size();
+        }
     }
+
+    kstat(block.GetBlockTime(), txCount, txIns, txOuts);
 
     // BIP16 didn't become active until Apr 1 2012
     int64_t nBIP16SwitchTime = 1333238400;
