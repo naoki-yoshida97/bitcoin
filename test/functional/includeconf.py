@@ -6,7 +6,6 @@
 
 import os
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import start_node
 
 class IncludeConfTest(BitcoinTestFramework):
 
@@ -39,10 +38,6 @@ class IncludeConfTest(BitcoinTestFramework):
         nwinfo = self.nodes[0].getnetworkinfo()
         subversion = nwinfo["subversion"]
         assert subversion.endswith("main; relative)/")
-
-        # Ensure bitcoin does not crash with an invalid conf file
-        node2 = start_node(2, self.options.tmpdir, ['-conf=::3243$#@'])
-        assert node2
 
 if __name__ == '__main__':
     IncludeConfTest().main()
