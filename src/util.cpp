@@ -390,7 +390,7 @@ void ArgsManager::ProcessSetting(std::string& strKey, std::string& strValue, std
         auto& loaded = mapMultiArgs[strValue];
         if (std::find(loaded.begin(), loaded.end(), strValue) == loaded.end()) {
             loaded.push_back(strValue); // we get two entries; ugly but harmless
-            ReadConfigFile(strValue, true, false);
+            ReadConfigFile(strValue, false);
         }
     }
     InterpretNegativeSetting(strKey, strValue);
@@ -629,15 +629,11 @@ void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig, const std::string
     }
 }
 
-void ArgsManager::ReadConfigFile(const std::string& confPath, bool warnOnFailure, bool lockAndClear)
+void ArgsManager::ReadConfigFile(const std::string& confPath, bool lockAndClear)
 {
     fs::path configFile = GetConfigFile(confPath);
     fs::ifstream streamConfig(configFile);
     if (!streamConfig.good()) {
-        if (warnOnFailure) {
-            LogPrintf("Unable to read config file: %s\n", confPath.c_str());
-            fprintf(stderr, "Unable to read config file: %s\n", confPath.c_str()); // We may be behind -printtoconsole, so we print to stderr too.
-        }
         return; // No bitcoin.conf file is OK
     }
 
