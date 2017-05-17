@@ -356,6 +356,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-readconfig=<dir>", _("Specify additional configuration file(s), relative to the -datadir path"));
     strUsage += HelpMessageOpt("-addconf=<dir>", _("Specify additional configuration file(s), relative to the -datadir path"));
     strUsage += HelpMessageOpt("-includeconf=<dir>", _("Specify additional configuration file(s), relative to the -datadir path (or the path of the file in which the statement occurs, if read from a file)"));
+    strUsage += HelpMessageOpt("-includeconf=<file>", _("Specify additional configuration file, relative to the -datadir path"));
     strUsage += HelpMessageOpt("-dbcache=<n>", strprintf(_("Set database cache size in megabytes (%d to %d, default: %d)"), nMinDbCache, nMaxDbCache, nDefaultDbCache));
     if (showDebug)
         strUsage += HelpMessageOpt("-feefilter", strprintf("Tell other nodes to filter invs to us by our mempool min fee (default: %u)", DEFAULT_FEEFILTER));
