@@ -1687,16 +1687,56 @@ static int64_t nTimeTotal = 0;
 static uint32_t kstati = 0;
 static FILE* kstats = NULL;
 struct ks_t {
+    uint8_t blockHash[32];
     int64_t blockTime;
     uint32_t txs, ins, outs;
 };
-static inline void kstat(int64_t blockTime, uint32_t txs, uint32_t ins, uint32_t outs)
+static inline void kstat(uint256 blockHash, int64_t blockTime, uint32_t txs, uint32_t ins, uint32_t outs)
 {
+    // marker
+    uint8_t ff = 0xff;
     if (!kstats) kstats = fopen("kstats.dat", "ab");
-    ks_t k{blockTime, txs, ins, outs};
-    fwrite(&k, sizeof(struct ks_t), 1, kstats);
+    fwrite(&ff, 1, 1, kstats);
+    ks_t k;
+    k.blockTime = blockTime;
+    k.txs = txs;
+    k.ins = ins;
+    k.outs = outs;
+    memcpy(k.blockHash, blockHash.begin(), 32);
+    fwrite(&k, 52, 1, kstats);
     kstati++;
-    if (kstati % 100 == 0) fflush(kstats);
+    fflush(kstats);
+}
+static inline void kstat_e(const uint8_t* data, uint32_t len)
+{
+    fwrite(&len, 4, 1, kstats);
+    fwrite(data, 1, len, kstats);
+}
+static inline void kstat_i(uint32_t i)
+{
+    fwrite(&i, 4, 1, kstats);
+}
+
+static inline void kstat_out(const CTxOut& txout)
+{
+    // Match if the filter contains any arbitrary script data element in any scriptPubKey in tx
+    // If this matches, also add the specific output that was matched.
+    // This means clients don't have to update the filter themselves when a new relevant tx 
+    // is discovered in order to find spending transactions, which avoids round-tripping and race conditions.
+    CScript::const_iterator pc = txout.scriptPubKey.begin();
+    std::vector<unsigned char> data;
+    bool wrote = false;
+    while (pc < txout.scriptPubKey.end()) {
+        opcodetype opcode;
+        if (!txout.scriptPubKey.GetOp(pc, opcode, data))
+            break;
+        if (data.size() != 0) {
+            kstat_e(data.data(), data.size());
+            wrote = true;
+            break;
+        }
+    }
+    if (!wrote) kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
 }
 
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
@@ -1802,7 +1842,24 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
         }
     }
 
-    kstat(block.GetBlockTime(), txCount, txIns, txOuts);
+    kstat(block.GetHash(), block.GetBlockTime(), txCount, txIns, txOuts);
+
+    for (const auto& tx : block.vtx) {
+        // printf("tx %s\n== ", tx->GetHash().ToString().c_str());
+        // const uint8_t* ch = tx->GetHash().begin();
+        // for (int i = 0; i < 32; i++) printf("%02x", ch[i]);
+        // printf("\n");
+        kstat_e(tx->GetHash().begin(), 32);
+        kstat_i(tx->vin.size());
+        for (const auto& txin : tx->vin) {
+            kstat_e(txin.prevout.hash.begin(), 32);
+        }
+        kstat_i(tx->vout.size());
+        for (const auto& txout : tx->vout) {
+            kstat_out(txout);
+            // kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
+        }
+    }
 
     // BIP16 didn't become active until Apr 1 2012
     int64_t nBIP16SwitchTime = 1333238400;
