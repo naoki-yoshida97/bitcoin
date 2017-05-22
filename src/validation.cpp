@@ -1736,7 +1736,11 @@ static inline void kstat_out(const CTxOut& txout)
             break;
         }
     }
-    if (!wrote) kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
+    if (!wrote) {
+        uint8_t z = 0;
+        kstat_e(&z, 0);
+        // kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
+    }
 }
 
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
