@@ -1705,7 +1705,6 @@ static inline void kstat(uint256 blockHash, int64_t blockTime, uint32_t txs, uin
     memcpy(k.blockHash, blockHash.begin(), 32);
     fwrite(&k, 52, 1, kstats);
     kstati++;
-    fflush(kstats);
 }
 static inline void kstat_e(const uint8_t* data, uint32_t len)
 {
@@ -1864,6 +1863,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
             // kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
         }
     }
+    fflush(kstats);
 
     // BIP16 didn't become active until Apr 1 2012
     int64_t nBIP16SwitchTime = 1333238400;
