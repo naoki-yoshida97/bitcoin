@@ -1720,7 +1720,7 @@ static inline void kstat_out(const CTxOut& txout)
 {
     // Match if the filter contains any arbitrary script data element in any scriptPubKey in tx
     // If this matches, also add the specific output that was matched.
-    // This means clients don't have to update the filter themselves when a new relevant tx 
+    // This means clients don't have to update the filter themselves when a new relevant tx
     // is discovered in order to find spending transactions, which avoids round-tripping and race conditions.
     CScript::const_iterator pc = txout.scriptPubKey.begin();
     std::vector<unsigned char> data;
@@ -1740,6 +1740,25 @@ static inline void kstat_out(const CTxOut& txout)
         kstat_e(&z, 0);
         // kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
     }
+}
+
+static inline bool kstat_out_nonempty(const CTxOut& txout)
+{
+    // Match if the filter contains any arbitrary script data element in any scriptPubKey in tx
+    // If this matches, also add the specific output that was matched.
+    // This means clients don't have to update the filter themselves when a new relevant tx
+    // is discovered in order to find spending transactions, which avoids round-tripping and race conditions.
+    CScript::const_iterator pc = txout.scriptPubKey.begin();
+    std::vector<unsigned char> data;
+    while (pc < txout.scriptPubKey.end()) {
+        opcodetype opcode;
+        if (!txout.scriptPubKey.GetOp(pc, opcode, data))
+            break;
+        if (data.size() != 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
@@ -1857,9 +1876,14 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
         for (const auto& txin : tx->vin) {
             kstat_e(txin.prevout.hash.begin(), 32);
         }
-        kstat_i(tx->vout.size());
+        uint32_t outsz = 0;
         for (const auto& txout : tx->vout) {
-            kstat_out(txout);
+            outsz += kstat_out_nonempty(txout) ? 1 : 0;
+        }
+
+        kstat_i(outsz);
+        for (const auto& txout : tx->vout) {
+            if (kstat_out_nonempty(txout)) kstat_out(txout);
             // kstat_e(txout.scriptPubKey.data(), txout.scriptPubKey.size());
         }
     }
