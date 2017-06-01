@@ -195,14 +195,14 @@ inline bool IsSwitchChar(char c)
 class ArgsManager
 {
 private:
-    void ReadConfigStream(fs::ifstream& streamConfig);
+    void ReadConfigFile(fs::ifstream& streamConfig);
 protected:
     CCriticalSection cs_args;
     std::map<std::string, std::string> mapArgs;
     std::map<std::string, std::vector<std::string> > mapMultiArgs;
 public:
     void ParseParameters(int argc, const char*const argv[]);
-    void ReadConfigFile(const std::string& confPath);
+    void ReadConfigFiles();
     std::vector<std::string> GetArgs(const std::string& strArg);
 
     /**
@@ -271,9 +271,9 @@ static inline void ParseParameters(int argc, const char*const argv[])
     gArgs.ParseParameters(argc, argv);
 }
 
-static inline void ReadConfigFile(const std::string& confPath)
+static inline void ReadConfigFiles()
 {
-    gArgs.ReadConfigFile(confPath);
+    gArgs.ReadConfigFiles();
 }
 
 static inline bool SoftSetArg(const std::string& strArg, const std::string& strValue)

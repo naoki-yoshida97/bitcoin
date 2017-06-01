@@ -598,7 +598,7 @@ fs::path GetConfigFile(const std::string& confPath)
     return pathConfigFile;
 }
 
-void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig)
+void ArgsManager::ReadConfigFile(fs::ifstream& streamConfig)
 {
     std::set<std::string> setOptions;
     setOptions.insert("*");
@@ -615,24 +615,30 @@ void ArgsManager::ReadConfigStream(fs::ifstream& streamConfig)
     }
 }
 
-void ArgsManager::ReadConfigFile(const std::string& confPath)
+void ArgsManager::ReadConfigFiles()
 {
+    const std::string confPath = GetArg("-conf", BITCOIN_CONF_FILENAME);
     fs::ifstream streamConfig(GetConfigFile(confPath));
     if (!streamConfig.good())
         return; // No bitcoin.conf file is OK
 
+    // we do not allow -includeconf from command line, so we clear it here
+    mapArgs.erase("-includeconf");
+
     std::string includeconf;
     {
         LOCK(cs_args);
-        ReadConfigStream(streamConfig);
+        ReadConfigFile(streamConfig);
         if (mapArgs.count("-includeconf")) includeconf = mapArgs["-includeconf"];
     }
     if (includeconf != "") {
-        fs::path includeFile = GetConfigFile(includeconf);
-        fs::ifstream includeConfig(includeFile);
+        LogPrintf("Attempting to include configuration file %s\n", includeconf.c_str());
+        fs::ifstream includeConfig(GetConfigFile(includeconf));
         if (includeConfig.good()) {
             LOCK(cs_args);
-            ReadConfigStream(includeConfig);
+            ReadConfigFile(includeConfig);
+        } else {
+            LogPrintf("Failed to include configuration file %s\n", includeconf.c_str());
         }
     }
     // If datadir is changed in .conf file:
