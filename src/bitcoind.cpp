@@ -103,7 +103,7 @@ bool AppInit(int argc, char* argv[])
         }
         try
         {
-            ReadConfigFile(GetArg("-conf", BITCOIN_CONF_FILENAME));
+            ReadConfigFiles();
         } catch (const std::exception& e) {
             fprintf(stderr,"Error reading configuration file: %s\n", e.what());
             return false;
