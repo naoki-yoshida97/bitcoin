@@ -1752,6 +1752,7 @@ UniValue listsinceblock(const JSONRPCRequest& request)
             "2. target_confirmations:    (numeric, optional, default=1) The confirmations required, must be 1 or more\n"
             "3. include_watchonly:       (bool, optional, default=false) Include transactions to watch-only addresses (see 'importaddress')\n"
             "4. include_removed:         (bool, optional, default=true) Show transactions that were removed due to a reorg in the \"removed\" array\n"
+            "                                                           (not guaranteed to work on pruned nodes)\n"
             "\nResult:\n"
             "{\n"
             "  \"transactions\": [\n"
@@ -1795,17 +1796,14 @@ UniValue listsinceblock(const JSONRPCRequest& request)
     int target_confirms = 1;
     isminefilter filter = ISMINE_SPENDABLE;
 
-    if (request.params.size() > 0 && !request.params[0].isNull())
-    {
+    if (!request.params[0].isNull()) {
         uint256 blockId;
 
         blockId.SetHex(request.params[0].get_str());
         BlockMap::iterator it = mapBlockIndex.find(blockId);
-        if (it != mapBlockIndex.end())
-        {
+        if (it != mapBlockIndex.end()) {
             paltindex = pindex = it->second;
-            if (chainActive[pindex->nHeight] != pindex)
-            {
+            if (chainActive[pindex->nHeight] != pindex) {
                 // the block being asked for is a part of a deactivated chain;
                 // we don't want to depend on its perceived height in the block
                 // chain, we want to instead use the last common ancestor
@@ -1814,20 +1812,19 @@ UniValue listsinceblock(const JSONRPCRequest& request)
         }
     }
 
-    if (request.params.size() > 1 && !request.params[1].isNull())
-    {
+    if (!request.params[1].isNull()) {
         target_confirms = request.params[1].get_int();
 
-        if (target_confirms < 1)
+        if (target_confirms < 1) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter");
+        }
     }
 
-    if (request.params.size() > 2 && !request.params[2].isNull() && request.params[2].get_bool())
-    {
+    if (!request.params[2].isNull() && request.params[2].get_bool()) {
         filter = filter | ISMINE_WATCH_ONLY;
     }
 
-    bool include_removed = (request.params.size() < 4 || request.params[3].isNull() || request.params[3].get_bool());
+    bool include_removed = (request.params[3].isNull() || request.params[3].get_bool());
 
     int depth = pindex ? (1 + chainActive.Height() - pindex->nHeight) : -1;
 
@@ -1836,24 +1833,21 @@ UniValue listsinceblock(const JSONRPCRequest& request)
     for (const std::pair<uint256, CWalletTx>& pairWtx : pwallet->mapWallet) {
         CWalletTx tx = pairWtx.second;
 
-        if (depth == -1 || tx.GetDepthInMainChain() < depth)
+        if (depth == -1 || tx.GetDepthInMainChain() < depth) {
             ListTransactions(pwallet, tx, "*", 0, true, transactions, filter);
+        }
     }
 
     // when a reorg'd block is requested, we also list any relevant transactions
     // in the blocks of the chain that was detached
     UniValue removed(UniValue::VARR);
-    while (include_removed && paltindex && paltindex != pindex)
-    {
+    while (include_removed && paltindex && paltindex != pindex) {
         CBlock block;
-        if (!ReadBlockFromDisk(block, paltindex, Params().GetConsensus()))
-        {
+        if (!ReadBlockFromDisk(block, paltindex, Params().GetConsensus())) {
             throw JSONRPCError(RPC_INTERNAL_ERROR, "Can't read block from disk");
         }
-        for (const CTransactionRef& tx : block.vtx)
-        {
-            if (pwallet->mapWallet.count(tx->GetHash()) > 0)
-            {
+        for (const CTransactionRef& tx : block.vtx) {
+            if (pwallet->mapWallet.count(tx->GetHash()) > 0) {
                 // Use -depth as minDepth parameter to ListTransactions to prevent incoming
                 // transactions from being filtered. These transactions have negative
                 // confirmations, but always greater than -depth.
