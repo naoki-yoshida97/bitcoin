@@ -66,6 +66,17 @@ class RawTransactionsTest(BitcoinTestFramework):
         # We should not get the tx if we provide an unrelated block
         assert_raises_jsonrpc(-5, "No such", self.nodes[0].getrawtransaction, tx, True, block2)
 
+        ##############################
+        # getrawtx with block height #
+        ##############################
+
+        # Get block count
+        blocks = self.nodes[2].getblockcount()
+        # We should be able to get the raw transaction by providing the correct block height (count-1)
+        assert_equal(self.nodes[0].getrawtransaction(tx, True, blocks-1)['txid'], tx)
+        # We should not get the tx if we provide an unrelated block
+        assert_raises_jsonrpc(-5, "No such", self.nodes[0].getrawtransaction, tx, True, blocks)
+
         #########################
         # RAW TX MULTISIG TESTS #
         #########################
