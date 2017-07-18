@@ -178,7 +178,8 @@ class ListSinceBlockTest (BitcoinTestFramework):
         Asserted:
 
         1. tx1 is listed in listsinceblock.
-        2. It is not included in 'removed' because it was not removed.
+        2. It is included in 'removed' as it was removed, even though it is now
+           present in a different block.
         3. It is listed with a confirmations count of 2 (bb3, bb4), not
            3 (aa1, aa2, aa3).
         '''
@@ -236,6 +237,11 @@ class ListSinceBlockTest (BitcoinTestFramework):
 
         # find transaction and ensure confirmations is valid
         for tx in lsbres['transactions']:
+            if tx['txid'] == txid1:
+                assert_equal(tx['confirmations'], 2)
+
+        # the same check for the removed array; confirmations should STILL be 2
+        for tx in lsbres['removed']:
             if tx['txid'] == txid1:
                 assert_equal(tx['confirmations'], 2)
 
