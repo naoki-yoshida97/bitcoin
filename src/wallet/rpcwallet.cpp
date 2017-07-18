@@ -1780,6 +1780,7 @@ UniValue listsinceblock(const JSONRPCRequest& request)
             "  ],\n"
             "  \"removed\": [\n"
             "    <structure is the same as \"transactions\" above, only present if include_removed=true>\n"
+            "    Note: transactions that were readded in the active chain will appear as-is in this array, and may thus have a positive confirmation count.\n"
             "  ],\n"
             "  \"lastblock\": \"lastblockhash\"     (string) The hash of the last block\n"
             "}\n"
@@ -1848,10 +1849,9 @@ UniValue listsinceblock(const JSONRPCRequest& request)
         }
         for (const CTransactionRef& tx : block.vtx) {
             if (pwallet->mapWallet.count(tx->GetHash()) > 0) {
-                // Use -depth as minDepth parameter to ListTransactions to prevent incoming
-                // transactions from being filtered. These transactions have negative
-                // confirmations, but always greater than -depth.
-                ListTransactions(pwallet, pwallet->mapWallet[tx->GetHash()], "*", -depth, true, removed, filter);
+                // We want all transactions regardless of confirmation count to appear here,
+                // even negative confirmation ones, hence the big negative.
+                ListTransactions(pwallet, pwallet->mapWallet[tx->GetHash()], "*", -100000000, true, removed, filter);
             }
         }
         paltindex = paltindex->pprev;
