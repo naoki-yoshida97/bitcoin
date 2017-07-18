@@ -86,7 +86,7 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
 
             "\nResult (if verbose is set to true):\n"
             "{\n"
-            "  \"inMainChain\": b,     (bool) Whether specified block is in the main chain or not (only present with explicit \"blockhash\" argument)\n"
+            "  \"inActiveChain\": b,   (bool) Whether specified block is in the active chain or not (only present with explicit \"blockhash\" argument)\n"
             "  \"hex\" : \"data\",       (string) The serialized, hex-encoded data for 'txid'\n"
             "  \"txid\" : \"id\",        (string) The transaction id (same as provided)\n"
             "  \"hash\" : \"id\",        (string) The transaction hash (differs from txid for witness transactions)\n"
@@ -140,7 +140,7 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
 
     LOCK(cs_main);
 
-    bool inMainChain = true;
+    bool inActiveChain = true;
     uint256 hash = ParseHashV(request.params[0], "parameter 1");
     CBlockIndex* blockIndex = NULL;
 
@@ -162,7 +162,7 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block hash not found");
             }
             blockIndex = it->second;
-            inMainChain = (chainActive[blockIndex->nHeight] == blockIndex);
+            inActiveChain = (chainActive[blockIndex->nHeight] == blockIndex);
         }
     }
 
@@ -187,7 +187,7 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
 
     UniValue result(UniValue::VOBJ);
     result.push_back(Pair("hex", strHex));
-    if (blockIndex) result.push_back(Pair("inMainChain", inMainChain));
+    if (blockIndex) result.push_back(Pair("inActiveChain", inActiveChain));
     TxToJSON(*tx, hashBlock, result);
     return result;
 }
