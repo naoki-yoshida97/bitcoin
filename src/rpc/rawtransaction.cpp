@@ -63,7 +63,7 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 1 || request.params.size() > 3)
         throw std::runtime_error(
-            "getrawtransaction \"txid\" ( verbose \"blockhash\" )\n"
+            "getrawtransaction \"txid\" ( verbose \"blockhash|height\" )\n"
 
             "\nNOTE: By default this function only works for mempool transactions. If the -txindex option is\n"
             "enabled, it also works for blockchain transactions. If the block which contains the transaction\n"
@@ -79,14 +79,14 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
             "\nArguments:\n"
             "1. \"txid\"      (string, required) The transaction id\n"
             "2. verbose       (bool, optional, default=false) If false, return a string, otherwise return a json object\n"
-            "3. \"blockhash\" (string, optional) The block in which to look for the transaction\n"
+            "3. \"blockhash|height\" (string or numeric, optional) The block hash or block height of the block in which to look for the transaction\n"
 
             "\nResult (if verbose is not set or set to false):\n"
             "\"data\"      (string) The serialized, hex-encoded data for 'txid'\n"
 
             "\nResult (if verbose is set to true):\n"
             "{\n"
-            "  \"inActiveChain\": b,   (bool) Whether specified block is in the active chain or not (only present with explicit \"blockhash\" argument)\n"
+            "  \"inActiveChain\": b,   (bool) Whether specified block is in the active chain or not (only present with explicit \"blockhash|height\" argument)\n"
             "  \"hex\" : \"data\",       (string) The serialized, hex-encoded data for 'txid'\n"
             "  \"txid\" : \"id\",        (string) The transaction id (same as provided)\n"
             "  \"hash\" : \"id\",        (string) The transaction hash (differs from txid for witness transactions)\n"
@@ -154,15 +154,20 @@ UniValue getrawtransaction(const JSONRPCRequest& request)
         }
     }
 
-    if (request.params.size() > 2 && !request.params[2].isNull()) {
-        uint256 blockHash = ParseHashV(request.params[2], "parameter 3");
-        if (!blockHash.IsNull()) {
-            BlockMap::iterator it = mapBlockIndex.find(blockHash);
-            if (it == mapBlockIndex.end()) {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block hash not found");
+    if (!request.params[2].isNull()) {
+        if (request.params[2].isNum()) {
+            blockIndex = chainActive[request.params[2].get_int()];
+            inActiveChain = true;
+        } else {
+            uint256 blockHash = ParseHashV(request.params[2], "parameter 3");
+            if (!blockHash.IsNull()) {
+                BlockMap::iterator it = mapBlockIndex.find(blockHash);
+                if (it == mapBlockIndex.end()) {
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block hash not found");
+                }
+                blockIndex = it->second;
+                inActiveChain = (chainActive[blockIndex->nHeight] == blockIndex);
             }
-            blockIndex = it->second;
-            inActiveChain = (chainActive[blockIndex->nHeight] == blockIndex);
         }
     }
 
