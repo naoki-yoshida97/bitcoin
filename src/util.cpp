@@ -900,12 +900,12 @@ int64_t GetStartupTime()
 
 void BitcoinProfilerSynchronize();
 
-std::mutex m_bp;
+CCriticalSection m_bp;
 
-#define DO_LOCK(m) std::lock_guard<std::mutex> lock(m)
-#define DO_LOCKx(m,c) std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr
-// #define DO_LOCK(m) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex> lock(m); printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
-// #define DO_LOCKx(m,c) if (c) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr; if (c) printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
+// #define LOCK(m) std::lock_guard<std::mutex> lock(m)
+// #define LOCKx(m,c) std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr
+// #define LOCK(m) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex> lock(m); printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
+// #define LOCKx(m,c) if (c) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr; if (c) printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
 
 struct BitcoinProfilerComponent {
     std::vector<uint64_t> vCycles;
@@ -926,7 +926,7 @@ struct BitcoinProfilerComponent {
       max(0)
     {}
     void append(uint64_t cycles, bool push = true) {
-        DO_LOCKx(m_bp, push);
+        // LOCKx(m_bp, push);
         // std::lock_guard<std::mutex>* lock = push ? new std::lock_guard<std::mutex>(m_bp) : nullptr;
         // We will never have a high increase over more than one,
         // and low will always end up smaller when it overflows.
@@ -937,14 +937,16 @@ struct BitcoinProfilerComponent {
         if (cycles < min) min = cycles;
         if (cycles > max) max = cycles;
         if (push) {
-            count++;
-            vCycles.push_back(cycles);
-            delete lock;
+            {
+                LOCK(m_bp);
+                count++;
+                vCycles.push_back(cycles);
+            }
             BitcoinProfilerSynchronize();
         }
     }
     void populate(uint64_t& high, uint64_t& low) const {
-        DO_LOCK(m_bp);
+        LOCK(m_bp);
         high += sumCyclesHigh + ((low + sumCyclesLow) < low);
         low += sumCyclesLow;
     }
@@ -971,7 +973,7 @@ struct BitcoinProfilerComponent {
         }
     }
     uint64_t med() const {
-        DO_LOCK(m_bp);
+        LOCK(m_bp);
         assert(count > 0);
         if (sumCyclesHigh == 0) {
             return sumCyclesLow / count;
@@ -1005,7 +1007,7 @@ struct BitcoinProfilerComponent {
     //     return std::sqrt(variance / count);
     // }
     double proportionOf(uint64_t h, uint64_t l) const {
-        DO_LOCK(m_bp);
+        LOCK(m_bp);
         // we want to return local h|l divided by h|l, which is in range [0.00, 1.00]
         // always holds: h >= local h
         uint64_t lh = sumCyclesHigh;
@@ -1071,7 +1073,7 @@ void BitcoinProfilerShowStats() {
 
 void BitcoinProfilerLoad() {
     {
-        DO_LOCK(m_bp);
+        LOCK(m_bp);
         FILE* fp = fopen("/tmp/bp.dat", "rb");
         if (!fp) {
             printf("ERROR: cannot open /tmp/bp.dat - no profile loaded\n");
@@ -1098,7 +1100,7 @@ void BitcoinProfilerSynchronize() {
     int64_t now = GetTime();
     if (lastSync + 60 < now) {
         {
-            DO_LOCK(m_bp);
+            LOCK(m_bp);
             printf("BitcoinProfilerSynchronize()\n");
             lastSync = now;
             FILE* fp = fopen("/tmp/bp.dat", "wb+");
