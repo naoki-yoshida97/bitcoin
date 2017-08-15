@@ -982,11 +982,14 @@ struct BitcoinProfilerComponent {
         // where myu = med()
         uint64_t myu = med();
         long double variance = 0.0;
+        printf("- variance = 0.0\n");
         for (uint64_t cycles : vCycles) {
-            long double diff = cycles - myu;
+            long double diff = (int64_t)cycles - (int64_t)myu;
             variance += diff * diff;
+            printf("- variance += (%Lf^2 == %Lf) == %Lf\n", diff, diff*diff, variance);
         }
-        return sqrt(variance / count);
+        printf("- sigma = sqrt(%Lf/%u == %Lf) == %Lf\n", variance, count, variance/count, std::sqrt(variance/count));
+        return std::sqrt(variance / count);
     }
     double proportionOf(uint64_t h, uint64_t l) const {
         // we want to return local h|l divided by h|l, which is in range [0.00, 1.00]
@@ -1047,7 +1050,7 @@ void BitcoinProfilerShowStats() {
     }
     for (const auto& comp : bpcomps) {
         const BitcoinProfilerComponent& c = comp.second;
-        printf("%8.2f %16llu %16llu %16llu %16.4lf %16llu %8u %s\n", c.proportionOf(h, l), c.min, c.max, c.med(), c.stddev(), c.bandwidth/c.count, c.count, comp.first.c_str());
+        printf("%8.5f %16llu %16llu %16llu %16.4lf %16llu %8u %s\n", c.proportionOf(h, l), c.min, c.max, c.med(), c.stddev(), c.bandwidth/c.count, c.count, comp.first.c_str());
     }
 }
 
@@ -1072,6 +1075,7 @@ void BitcoinProfilerSynchronize() {
     static int64_t lastSync = 0;
     int64_t now = GetTime();
     if (lastSync + 60 < now) {
+        lastSync = now;
         FILE* fp = fopen("/tmp/bp.dat", "w+");
         uint32_t count = bpcomps.size();
         fwrite(&count, sizeof(uint32_t), 1, fp);
@@ -1134,5 +1138,5 @@ BitcoinProfiler::~BitcoinProfiler() {
 
 void BitcoinProfiler::UsedBandwidth(uint64_t bytes)
 {
-    currentProfiler->bandwidth += bytes;
+    if (currentProfiler) currentProfiler->bandwidth += bytes;
 }
