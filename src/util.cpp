@@ -900,6 +900,13 @@ int64_t GetStartupTime()
 
 void BitcoinProfilerSynchronize();
 
+std::mutex m_bp;
+
+#define DO_LOCK(m) std::lock_guard<std::mutex> lock(m)
+#define DO_LOCKx(m,c) std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr
+// #define DO_LOCK(m) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex> lock(m); printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
+// #define DO_LOCKx(m,c) if (c) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr; if (c) printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
+
 struct BitcoinProfilerComponent {
     std::vector<uint64_t> vCycles;
     uint64_t sumCyclesHigh;
@@ -919,21 +926,25 @@ struct BitcoinProfilerComponent {
       max(0)
     {}
     void append(uint64_t cycles, bool push = true) {
+        DO_LOCKx(m_bp, push);
+        // std::lock_guard<std::mutex>* lock = push ? new std::lock_guard<std::mutex>(m_bp) : nullptr;
         // We will never have a high increase over more than one,
         // and low will always end up smaller when it overflows.
         //  0x0ff + 0x0ff = 0x1fe   (ff > fe)
         //  0x001 + 0x0ff = 0x100   (01 > 00)
-        count++;
         sumCyclesHigh += (cycles + sumCyclesLow) < sumCyclesLow;
         sumCyclesLow += cycles;
         if (cycles < min) min = cycles;
         if (cycles > max) max = cycles;
         if (push) {
+            count++;
             vCycles.push_back(cycles);
+            delete lock;
             BitcoinProfilerSynchronize();
         }
     }
     void populate(uint64_t& high, uint64_t& low) const {
+        DO_LOCK(m_bp);
         high += sumCyclesHigh + ((low + sumCyclesLow) < low);
         low += sumCyclesLow;
     }
@@ -943,6 +954,7 @@ struct BitcoinProfilerComponent {
                 sumCyclesLow < b.sumCyclesLow);
     }
     void serialize(FILE* fp) const {
+        if (count != vCycles.size()) printf("*** %u != %u\n", count, vCycles.size());
         assert(count == vCycles.size());
         fwrite(&count, sizeof(uint32_t), 1, fp);
         fwrite(&vCycles[0], sizeof(uint64_t), count, fp);
@@ -959,6 +971,7 @@ struct BitcoinProfilerComponent {
         }
     }
     uint64_t med() const {
+        DO_LOCK(m_bp);
         assert(count > 0);
         if (sumCyclesHigh == 0) {
             return sumCyclesLow / count;
@@ -977,21 +990,22 @@ struct BitcoinProfilerComponent {
         }
         return tl / dc;
     }
-    double stddev() const {
-        // sigma = sqrt((1/N) sum(i=1 to N)(x_i - myu)^2)
-        // where myu = med()
-        uint64_t myu = med();
-        long double variance = 0.0;
-        printf("- variance = 0.0\n");
-        for (uint64_t cycles : vCycles) {
-            long double diff = (int64_t)cycles - (int64_t)myu;
-            variance += diff * diff;
-            printf("- variance += (%Lf^2 == %Lf) == %Lf\n", diff, diff*diff, variance);
-        }
-        printf("- sigma = sqrt(%Lf/%u == %Lf) == %Lf\n", variance, count, variance/count, std::sqrt(variance/count));
-        return std::sqrt(variance / count);
-    }
+    // double stddev() const {
+    //     // sigma = sqrt((1/N) sum(i=1 to N)(x_i - myu)^2)
+    //     // where myu = med()
+    //     uint64_t myu = med();
+    //     long double variance = 0.0;
+    //     printf("- variance = 0.0\n");
+    //     for (uint64_t cycles : vCycles) {
+    //         long double diff = (int64_t)cycles - (int64_t)myu;
+    //         variance += diff * diff;
+    //         printf("- variance += (%Lf^2 == %Lf) == %Lf\n", diff, diff*diff, variance);
+    //     }
+    //     printf("- sigma = sqrt(%Lf/%u == %Lf) == %Lf\n", variance, count, variance/count, std::sqrt(variance/count));
+    //     return std::sqrt(variance / count);
+    // }
     double proportionOf(uint64_t h, uint64_t l) const {
+        DO_LOCK(m_bp);
         // we want to return local h|l divided by h|l, which is in range [0.00, 1.00]
         // always holds: h >= local h
         uint64_t lh = sumCyclesHigh;
@@ -1024,7 +1038,7 @@ void BitcoinProfilerSanityCheck() {
     assert(c.sumCyclesHigh == 1);
     assert(c.proportionOf(1, 0) == 1);
     assert(c.med() == 0x8000000000000000);
-    assert(c.stddev() > 0x6fffffffffffffff && c.stddev() < 0x8fffffffffffffff);
+    // assert(c.stddev() > 0x6fffffffffffffff && c.stddev() < 0x8fffffffffffffff);
     BitcoinProfilerComponent d;
     BitcoinProfilerComponent e;
     e.append(0xffffffffffffffffull);
@@ -1034,7 +1048,7 @@ void BitcoinProfilerSanityCheck() {
     assert(d.min == 0xffffffffffffffffull);
     assert(d.max == 0xffffffffffffffffull);
     assert(Approximately(e.proportionOf(d.sumCyclesHigh, d.sumCyclesLow), 0.01));
-    assert(Approximately(d.stddev(), 0));
+    // assert(Approximately(d.stddev(), 0));
 }
 
 std::map<const std::string,BitcoinProfilerComponent> bpcomps;
@@ -1042,32 +1056,40 @@ BitcoinProfiler* currentProfiler = nullptr;
 
 void BitcoinProfilerShowStats() {
     printf("             Profiler Statistics (%u components):\n", (uint32_t)bpcomps.size());
-    printf("%%:       min:             max:             med:             stddev:          bandwidth (b):   count:   component:\n");
-    printf( "======== ================ ================ ================ ================ ================ ======== ==================================\n");
+    printf("%%:       min:             max:             med:             bandwidth (b):   count:   component:\n");
+    printf( "======== ================ ================ ================ ================ ======== ==================================\n");
     uint64_t h = 0, l = 0;
     for (const auto& comp : bpcomps) {
         comp.second.populate(h, l);
     }
     for (const auto& comp : bpcomps) {
         const BitcoinProfilerComponent& c = comp.second;
-        printf("%8.5f %16llu %16llu %16llu %16.4lf %16llu %8u %s\n", c.proportionOf(h, l), c.min, c.max, c.med(), c.stddev(), c.bandwidth/c.count, c.count, comp.first.c_str());
+        printf("%8.5f %16llu %16llu %16llu %16llu %8u %s\n",
+            c.proportionOf(h, l), c.min, c.max, c.med(), c.bandwidth/c.count, c.count, comp.first.c_str());
     }
 }
 
 void BitcoinProfilerLoad() {
-    BitcoinProfilerSanityCheck();
-    FILE* fp = fopen("/tmp/bp.dat", "r");
-    if (!fp) return;
-    uint32_t count;
-    fread(&count, sizeof(uint32_t), 1, fp);
-    for (uint32_t i = 0; i < count; i++) {
-        uint32_t len;
-        fread(&len, sizeof(uint32_t), 1, fp);
-        char buf[len];
-        fread(buf, 1, len, fp);
-        bpcomps[buf].deserialize(fp);
+    {
+        DO_LOCK(m_bp);
+        FILE* fp = fopen("/tmp/bp.dat", "rb");
+        if (!fp) {
+            printf("ERROR: cannot open /tmp/bp.dat - no profile loaded\n");
+            return;
+        }
+        uint32_t count;
+        fread(&count, sizeof(uint32_t), 1, fp);
+        printf("got %u entries\n", count);
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t len;
+            fread(&len, sizeof(uint32_t), 1, fp);
+            char buf[len];
+            fread(buf, 1, len, fp);
+            bpcomps[buf].deserialize(fp);
+            printf("got %s [%u, %u]\n", buf, bpcomps[buf].count, bpcomps[buf].vCycles.size());
+        }
+        fclose(fp);
     }
-    fclose(fp);
     BitcoinProfilerShowStats();
 }
 
@@ -1075,17 +1097,21 @@ void BitcoinProfilerSynchronize() {
     static int64_t lastSync = 0;
     int64_t now = GetTime();
     if (lastSync + 60 < now) {
-        lastSync = now;
-        FILE* fp = fopen("/tmp/bp.dat", "w+");
-        uint32_t count = bpcomps.size();
-        fwrite(&count, sizeof(uint32_t), 1, fp);
-        for (const auto& comp : bpcomps) {
-            uint32_t len = comp.first.length() + 1;
-            fwrite(&len, sizeof(uint32_t), 1, fp);
-            fwrite(comp.first.c_str(), 1, len, fp);
-            comp.second.serialize(fp);
+        {
+            DO_LOCK(m_bp);
+            printf("BitcoinProfilerSynchronize()\n");
+            lastSync = now;
+            FILE* fp = fopen("/tmp/bp.dat", "wb+");
+            uint32_t count = bpcomps.size();
+            fwrite(&count, sizeof(uint32_t), 1, fp);
+            for (const auto& comp : bpcomps) {
+                uint32_t len = comp.first.length() + 1;
+                fwrite(&len, sizeof(uint32_t), 1, fp);
+                fwrite(comp.first.c_str(), 1, len, fp);
+                comp.second.serialize(fp);
+            }
+            fclose(fp);
         }
-        fclose(fp);
         BitcoinProfilerShowStats();
     }
 }
@@ -1117,10 +1143,12 @@ uint64_t rdtsc(){
 BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent)
 : component(currentProfiler ? strprintf("%s.%s", currentProfiler->component, componentIn) : componentIn),
   start(shareTimeWithParent ? currentProfiler->start : rdtsc()),
+  bandwidth(0),
   parent(currentProfiler) {
     currentProfiler = this;
     static bool loadProfiler = true;
     if (loadProfiler) {
+        printf("BitcoinProfilerLoad()\n");
         loadProfiler = false;
         BitcoinProfilerLoad();
     }
