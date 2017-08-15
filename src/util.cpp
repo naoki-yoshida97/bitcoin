@@ -897,3 +897,242 @@ int64_t GetStartupTime()
 {
     return nStartupTime;
 }
+
+void BitcoinProfilerSynchronize();
+
+struct BitcoinProfilerComponent {
+    std::vector<uint64_t> vCycles;
+    uint64_t sumCyclesHigh;
+    uint64_t sumCyclesLow;
+    uint32_t count;
+    uint64_t bandwidth;
+
+    uint64_t min;
+    uint64_t max;
+
+    BitcoinProfilerComponent()
+    : sumCyclesHigh(0),
+      sumCyclesLow(0),
+      count(0),
+      bandwidth(0),
+      min(0xffffffffffffffffull),
+      max(0)
+    {}
+    void append(uint64_t cycles, bool push = true) {
+        // We will never have a high increase over more than one,
+        // and low will always end up smaller when it overflows.
+        //  0x0ff + 0x0ff = 0x1fe   (ff > fe)
+        //  0x001 + 0x0ff = 0x100   (01 > 00)
+        count++;
+        sumCyclesHigh += (cycles + sumCyclesLow) < sumCyclesLow;
+        sumCyclesLow += cycles;
+        if (cycles < min) min = cycles;
+        if (cycles > max) max = cycles;
+        if (push) {
+            vCycles.push_back(cycles);
+            BitcoinProfilerSynchronize();
+        }
+    }
+    void populate(uint64_t& high, uint64_t& low) const {
+        high += sumCyclesHigh + ((low + sumCyclesLow) < low);
+        low += sumCyclesLow;
+    }
+    bool operator<(const BitcoinProfilerComponent& b) const {
+        return sumCyclesHigh < b.sumCyclesHigh ||
+               (sumCyclesHigh == b.sumCyclesHigh &&
+                sumCyclesLow < b.sumCyclesLow);
+    }
+    void serialize(FILE* fp) const {
+        assert(count == vCycles.size());
+        fwrite(&count, sizeof(uint32_t), 1, fp);
+        fwrite(&vCycles[0], sizeof(uint64_t), count, fp);
+        fwrite(&bandwidth, sizeof(uint64_t), 1, fp);
+    }
+    void deserialize(FILE* fp) {
+        fread(&count, sizeof(uint32_t), 1, fp);
+        vCycles.resize(count);
+        fread(&vCycles[0], sizeof(uint64_t), count, fp);
+        fread(&bandwidth, sizeof(uint64_t), 1, fp);
+        sumCyclesHigh = sumCyclesLow = 0;
+        for (uint64_t cycles : vCycles) {
+            append(cycles, false);
+        }
+    }
+    uint64_t med() const {
+        assert(count > 0);
+        if (sumCyclesHigh == 0) {
+            return sumCyclesLow / count;
+        }
+        double dc = count;
+        uint64_t th = sumCyclesHigh;
+        uint64_t tl = sumCyclesLow;
+        // shift rightward until we run out of high cycles
+        while (th && dc >= 2) {
+            dc /= 2;                        // 0babc                -> 0bab.c
+            tl = (tl >> 1) | (th << 63);    // 0b000ghi, 0bjklmno   -> 0b000ghi, 0bijklmn
+            th >>= 1;                       // 0b000ghi             -> 0b0000gh
+        }
+        if (th) {
+            return 0xffffffffffffffull; // just give max
+        }
+        return tl / dc;
+    }
+    double stddev() const {
+        // sigma = sqrt((1/N) sum(i=1 to N)(x_i - myu)^2)
+        // where myu = med()
+        uint64_t myu = med();
+        long double variance = 0.0;
+        for (uint64_t cycles : vCycles) {
+            long double diff = cycles - myu;
+            variance += diff * diff;
+        }
+        return sqrt(variance / count);
+    }
+    double proportionOf(uint64_t h, uint64_t l) const {
+        // we want to return local h|l divided by h|l, which is in range [0.00, 1.00]
+        // always holds: h >= local h
+        uint64_t lh = sumCyclesHigh;
+        uint64_t ll = sumCyclesLow;
+        // we want to push rightward until both highs are 0
+        while (lh > 0 || h > 0) {
+            ll = (ll >> 1) | (lh << 63);
+            l  = ( l >> 1) | ( h << 63);
+            lh >>= 1;
+            h >>= 1;
+        }
+        return (double)ll / l;
+    }
+};
+
+static inline bool Approximately(double a, double b) { return (a-b) < 0.0001 || (b-a) < 0.0001; }
+
+void BitcoinProfilerSanityCheck() {
+    BitcoinProfilerComponent c;
+    assert(c.count == 0);
+    c.append(0xffffffffffffffffull);
+    assert(c.min == 0xffffffffffffffffull);
+    assert(c.max == 0xffffffffffffffffull);
+    assert(c.sumCyclesLow == 0xffffffffffffffffull);
+    assert(c.sumCyclesHigh == 0);
+    c.append(1);
+    assert(c.min == 1);
+    assert(c.max == 0xffffffffffffffffull);
+    assert(c.sumCyclesLow == 0);
+    assert(c.sumCyclesHigh == 1);
+    assert(c.proportionOf(1, 0) == 1);
+    assert(c.med() == 0x8000000000000000);
+    assert(c.stddev() > 0x6fffffffffffffff && c.stddev() < 0x8fffffffffffffff);
+    BitcoinProfilerComponent d;
+    BitcoinProfilerComponent e;
+    e.append(0xffffffffffffffffull);
+    for (int i = 0; i < 100; i++) {
+        d.append(0xffffffffffffffffull);
+    }
+    assert(d.min == 0xffffffffffffffffull);
+    assert(d.max == 0xffffffffffffffffull);
+    assert(Approximately(e.proportionOf(d.sumCyclesHigh, d.sumCyclesLow), 0.01));
+    assert(Approximately(d.stddev(), 0));
+}
+
+std::map<const std::string,BitcoinProfilerComponent> bpcomps;
+BitcoinProfiler* currentProfiler = nullptr;
+
+void BitcoinProfilerShowStats() {
+    printf("             Profiler Statistics (%u components):\n", (uint32_t)bpcomps.size());
+    printf("%%:       min:             max:             med:             stddev:          bandwidth (b):   count:   component:\n");
+    printf( "======== ================ ================ ================ ================ ================ ======== ==================================\n");
+    uint64_t h = 0, l = 0;
+    for (const auto& comp : bpcomps) {
+        comp.second.populate(h, l);
+    }
+    for (const auto& comp : bpcomps) {
+        const BitcoinProfilerComponent& c = comp.second;
+        printf("%8.2f %16llu %16llu %16llu %16.4lf %16llu %8u %s\n", c.proportionOf(h, l), c.min, c.max, c.med(), c.stddev(), c.bandwidth/c.count, c.count, comp.first.c_str());
+    }
+}
+
+void BitcoinProfilerLoad() {
+    BitcoinProfilerSanityCheck();
+    FILE* fp = fopen("/tmp/bp.dat", "r");
+    if (!fp) return;
+    uint32_t count;
+    fread(&count, sizeof(uint32_t), 1, fp);
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t len;
+        fread(&len, sizeof(uint32_t), 1, fp);
+        char buf[len];
+        fread(buf, 1, len, fp);
+        bpcomps[buf].deserialize(fp);
+    }
+    fclose(fp);
+    BitcoinProfilerShowStats();
+}
+
+void BitcoinProfilerSynchronize() {
+    static int64_t lastSync = 0;
+    int64_t now = GetTime();
+    if (lastSync + 60 < now) {
+        FILE* fp = fopen("/tmp/bp.dat", "w+");
+        uint32_t count = bpcomps.size();
+        fwrite(&count, sizeof(uint32_t), 1, fp);
+        for (const auto& comp : bpcomps) {
+            uint32_t len = comp.first.length() + 1;
+            fwrite(&len, sizeof(uint32_t), 1, fp);
+            fwrite(comp.first.c_str(), 1, len, fp);
+            comp.second.serialize(fp);
+        }
+        fclose(fp);
+        BitcoinProfilerShowStats();
+    }
+}
+
+// Source: https://stackoverflow.com/questions/13772567/get-cpu-cycle-count
+// {
+
+//  Windows
+#ifdef _WIN32
+
+#include <intrin.h>
+uint64_t rdtsc(){
+    return __rdtsc();
+}
+
+//  Linux/GCC
+#else
+
+uint64_t rdtsc(){
+    unsigned int lo,hi;
+    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
+#endif
+
+// }
+
+BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent)
+: component(currentProfiler ? strprintf("%s.%s", currentProfiler->component, componentIn) : componentIn),
+  start(shareTimeWithParent ? currentProfiler->start : rdtsc()),
+  parent(currentProfiler) {
+    currentProfiler = this;
+    static bool loadProfiler = true;
+    if (loadProfiler) {
+        loadProfiler = false;
+        BitcoinProfilerLoad();
+    }
+}
+
+BitcoinProfiler::~BitcoinProfiler() {
+    bpcomps[component].append(rdtsc() - start);
+    if (bandwidth) {
+        if (parent) parent->bandwidth += bandwidth;
+        bpcomps[component].bandwidth += bandwidth;
+    }
+    assert(currentProfiler == this);
+    currentProfiler = parent;
+}
+
+void BitcoinProfiler::UsedBandwidth(uint64_t bytes)
+{
+    currentProfiler->bandwidth += bytes;
+}

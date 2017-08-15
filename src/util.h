@@ -326,4 +326,20 @@ template <typename Callable> void TraceThread(const char* name,  Callable func)
 
 std::string CopyrightHolders(const std::string& strPrefix);
 
+class BitcoinProfiler {
+private:
+    const std::string component;
+    const uint64_t start;
+public:
+    uint64_t bandwidth;
+    BitcoinProfiler* parent;
+
+    BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent = false);
+    ~BitcoinProfiler();
+    static void UsedBandwidth(uint64_t bytes);
+};
+
+#define PROF(comp)   BitcoinProfiler prof##__COUNTER__(comp)
+#define PROFBR(comp) BitcoinProfiler prof##_COUNTER__(comp, true)
+
 #endif // BITCOIN_UTIL_H
