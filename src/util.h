@@ -340,6 +340,6 @@ public:
 };
 
 #define PROF(comp)   BitcoinProfiler prof##__COUNTER__(comp)
-#define PROFBR(comp) BitcoinProfiler prof##_COUNTER__(comp, true)
+#define PROFBR(comp) BitcoinProfiler prof##__COUNTER__(comp, true)
 
 #endif // BITCOIN_UTIL_H
