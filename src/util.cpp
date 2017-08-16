@@ -1054,7 +1054,15 @@ void BitcoinProfilerSanityCheck() {
 }
 
 std::map<const std::string,BitcoinProfilerComponent> bpcomps;
-BitcoinProfiler* currentProfiler = nullptr;
+// BitcoinProfiler* currentProfiler = nullptr;
+
+std::map<std::thread::id,BitcoinProfiler*> currentProfilers;
+BitcoinProfiler* getCurrentProfiler() {
+    return currentProfilers[std::this_thread::get_id()];
+}
+void setCurrentProfiler(BitcoinProfiler* p) {
+    currentProfilers[std::this_thread::get_id()] = p;
+}
 
 void BitcoinProfilerShowStats() {
     printf("             Profiler Statistics (%u components):\n", (uint32_t)bpcomps.size());
@@ -1143,11 +1151,11 @@ uint64_t rdtsc(){
 // }
 
 BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent)
-: component(currentProfiler ? strprintf("%s.%s", currentProfiler->component, componentIn) : componentIn),
-  start(shareTimeWithParent && currentProfiler ? currentProfiler->start : rdtsc()),
+: component(getCurrentProfiler() ? strprintf("%s.%s", getCurrentProfiler()->component, componentIn) : componentIn),
+  start(shareTimeWithParent && getCurrentProfiler() ? getCurrentProfiler()->start : rdtsc()),
   bandwidth(0),
-  parent(currentProfiler) {
-    currentProfiler = this;
+  parent(getCurrentProfiler()) {
+    setCurrentProfiler(this);
     static bool loadProfiler = true;
     if (loadProfiler) {
         printf("BitcoinProfilerLoad()\n");
@@ -1162,11 +1170,11 @@ BitcoinProfiler::~BitcoinProfiler() {
         if (parent) parent->bandwidth += bandwidth;
         bpcomps[component].bandwidth += bandwidth;
     }
-    assert(currentProfiler == this);
-    currentProfiler = parent;
+    assert(getCurrentProfiler() == this);
+    setCurrentProfiler(parent);
 }
 
 void BitcoinProfiler::UsedBandwidth(uint64_t bytes)
 {
-    if (currentProfiler) currentProfiler->bandwidth += bytes;
+    if (getCurrentProfiler()) getCurrentProfiler()->bandwidth += bytes;
 }
