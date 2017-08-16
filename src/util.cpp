@@ -83,6 +83,7 @@
 #include <openssl/crypto.h>
 #include <openssl/rand.h>
 #include <openssl/conf.h>
+#include <thread>
 
 // Application startup time (used for uptime calculation)
 const int64_t nStartupTime = GetTime();
