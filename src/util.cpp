@@ -1144,7 +1144,7 @@ uint64_t rdtsc(){
 
 BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent)
 : component(currentProfiler ? strprintf("%s.%s", currentProfiler->component, componentIn) : componentIn),
-  start(shareTimeWithParent ? currentProfiler->start : rdtsc()),
+  start(shareTimeWithParent && currentProfiler ? currentProfiler->start : rdtsc()),
   bandwidth(0),
   parent(currentProfiler) {
     currentProfiler = this;
