@@ -2800,7 +2800,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 {
     size_t nMessageSize = msg.data.size();
     size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
-    PROFBR("PushMessage::" + msg.command);
+    PROFBR("PushMessage::" + msg.command + "(" + (nTotalSize < 128 ? "<128b" : nTotalSize < 2048 ? "<2k" : nTotalSize < 10240 ? "<10k" : ">10k") + ")");
     BitcoinProfiler::UsedBandwidth(nTotalSize);
     LogPrint(BCLog::NET, "sending %s (%d bytes) peer=%d\n",  SanitizeString(msg.command.c_str()), nMessageSize, pnode->GetId());
 
@@ -2814,8 +2814,11 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 
     size_t nBytesSent = 0;
     {
+        PROFBRBEG(lockprofcsvsend, "LOCK(pnode->cs_vSend)");
         LOCK(pnode->cs_vSend);
+        PROFBREND(lockprofcsvsend);
         bool optimisticSend(pnode->vSendMsg.empty());
+        PROFBR(optimisticSend ? "optimisticSend" : "!optimisticSend");
 
         //log total amount of bytes per command
         pnode->mapSendBytesPerMsgCmd[msg.command] += nTotalSize;

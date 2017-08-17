@@ -696,6 +696,7 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRE
 // Requires cs_main.
 void Misbehaving(NodeId pnode, int howmuch)
 {
+    PROFBR("Misbehaving(" + std::to_string(howmuch) + ")");
     if (howmuch == 0)
         return;
 
@@ -1052,6 +1053,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                         bool sendMerkleBlock = false;
                         CMerkleBlock merkleBlock;
                         {
+                            PROFBR("LOCK(pfrom->cs_filter)");
                             LOCK(pfrom->cs_filter);
                             if (pfrom->pfilter) {
                                 sendMerkleBlock = true;
@@ -1059,6 +1061,7 @@ void static ProcessGetData(CNode* pfrom, const Consensus::Params& consensusParam
                             }
                         }
                         if (sendMerkleBlock) {
+                            PROFBR("sendMerkleBlock");
                             connman.PushMessage(pfrom, msgMaker.Make(NetMsgType::MERKLEBLOCK, merkleBlock));
                             // CMerkleBlock just contains hashes, so also push any transactions in the block the client did not see
                             // This avoids hurting performance by pointlessly requiring a round-trip
@@ -1458,6 +1461,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
     else if (strCommand == NetMsgType::ADDR)
     {
+        PROF("ADDR");
         std::vector<CAddress> vAddr;
         vRecv >> vAddr;
 
@@ -1535,6 +1539,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
     else if (strCommand == NetMsgType::INV)
     {
+        PROF("INV");
         std::vector<CInv> vInv;
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
@@ -1596,6 +1601,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
     else if (strCommand == NetMsgType::GETDATA)
     {
+        PROF("GETDATA");
         std::vector<CInv> vInv;
         vRecv >> vInv;
         if (vInv.size() > MAX_INV_SZ)
@@ -1789,10 +1795,12 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
     else if (strCommand == NetMsgType::TX)
     {
+        PROF("TX");
         // Stop processing the transaction early if
         // We are in blocks only mode and peer is either not whitelisted or whitelistrelay is off
         if (!fRelayTxes && (!pfrom->fWhitelisted || !gArgs.GetBoolArg("-whitelistrelay", DEFAULT_WHITELISTRELAY)))
         {
+            PROFBR("protocol violation tx send");
             LogPrint(BCLog::NET, "transaction sent in violation of protocol peer=%d\n", pfrom->GetId());
             return true;
         }
@@ -1807,7 +1815,6 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         pfrom->AddInventoryKnown(inv);
 
         LOCK(cs_main);
-        PROF("TX");
 
         bool fMissingInputs = false;
         CValidationState state;
@@ -1835,6 +1842,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             // Recursively process any orphan transactions that depended on this one
             std::set<NodeId> setMisbehaving;
             while (!vWorkQueue.empty()) {
+                PROFBR("vWorkQueue[" + std::to_string(vWorkQueue.size()) + "]");
                 auto itByPrev = mapOrphanTransactionsByPrev.find(vWorkQueue.front());
                 vWorkQueue.pop_front();
                 if (itByPrev == mapOrphanTransactionsByPrev.end())
@@ -1857,6 +1865,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                     if (setMisbehaving.count(fromPeer))
                         continue;
                     if (AcceptToMemoryPool(mempool, stateDummy, porphanTx, true, &fMissingInputs2, &lRemovedTxn)) {
+                        PROFBR("AcceptToMemoryPool");
                         LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanHash.ToString());
                         RelayTransaction(orphanTx, connman);
                         for (unsigned int i = 0; i < orphanTx.vout.size(); i++) {
@@ -3127,6 +3136,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
 
             // Respond to BIP35 mempool requests
             if (fSendTrickle && pto->fSendMempool) {
+                PROFBR("trickle (BIP35-mempool-reqs)");
                 auto vtxinfo = mempool.infoAll();
                 pto->fSendMempool = false;
                 CAmount filterrate = 0;
@@ -3160,6 +3170,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
 
             // Determine transactions to relay
             if (fSendTrickle) {
+                PROFBR("trickle (tx-relay)");
                 // Produce a vector with all candidates for sending
                 std::vector<std::set<uint256>::iterator> vInvTx;
                 vInvTx.reserve(pto->setInventoryTxToSend.size());
@@ -3318,10 +3329,12 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             const CInv& inv = (*pto->mapAskFor.begin()).second;
             if (!AlreadyHave(inv))
             {
+                PROFBR("!AlreadyHave");
                 LogPrint(BCLog::NET, "Requesting %s peer=%d\n", inv.ToString(), pto->GetId());
                 vGetData.push_back(inv);
                 if (vGetData.size() >= 1000)
                 {
+                    PROFBR("vGetData.size() >= 1000");
                     connman.PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
                     vGetData.clear();
                 }
