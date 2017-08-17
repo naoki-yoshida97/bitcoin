@@ -912,7 +912,7 @@ struct BitcoinProfilerComponent {
     std::vector<uint64_t> vCycles;
     uint64_t sumCyclesHigh;
     uint64_t sumCyclesLow;
-    uint32_t count;
+    uint64_t count;
     uint64_t bandwidth;
 
     uint64_t min;
@@ -942,6 +942,9 @@ struct BitcoinProfilerComponent {
                 LOCK(m_bp);
                 count++;
                 vCycles.push_back(cycles);
+                if (vCycles.size() > 2000) {
+                    std::vector<decltype(vCycles)::value_type>(vCycles.begin()+vCycles.size()-1000, vCycles.end()).swap(vCycles);
+                }
             }
             BitcoinProfilerSynchronize();
         }
@@ -957,16 +960,18 @@ struct BitcoinProfilerComponent {
                 sumCyclesLow < b.sumCyclesLow);
     }
     void serialize(FILE* fp) const {
-        if (count != vCycles.size()) printf("*** %u != %u\n", count, vCycles.size());
-        assert(count == vCycles.size());
-        fwrite(&count, sizeof(uint32_t), 1, fp);
-        fwrite(&vCycles[0], sizeof(uint64_t), count, fp);
+        fwrite(&count, sizeof(uint64_t), 1, fp);
+        uint16_t vCyclesSize = vCycles.size();
+        fwrite(&vCyclesSize, sizeof(uint16_t), 1, fp);
+        fwrite(&vCycles[0], sizeof(uint64_t), vCyclesSize, fp);
         fwrite(&bandwidth, sizeof(uint64_t), 1, fp);
     }
     void deserialize(FILE* fp) {
-        fread(&count, sizeof(uint32_t), 1, fp);
-        vCycles.resize(count);
-        fread(&vCycles[0], sizeof(uint64_t), count, fp);
+        fread(&count, sizeof(uint64_t), 1, fp);
+        uint16_t vCyclesSize;
+        fread(&vCyclesSize, sizeof(uint16_t), 1, fp);
+        vCycles.resize(vCyclesSize);
+        fread(&vCycles[0], sizeof(uint64_t), vCyclesSize, fp);
         fread(&bandwidth, sizeof(uint64_t), 1, fp);
         sumCyclesHigh = sumCyclesLow = 0;
         for (uint64_t cycles : vCycles) {
