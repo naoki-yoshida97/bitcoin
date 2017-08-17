@@ -2814,9 +2814,7 @@ void CConnman::PushMessage(CNode* pnode, CSerializedNetMsg&& msg)
 
     size_t nBytesSent = 0;
     {
-        PROFBRBEG(lockprofcsvsend, "LOCK(pnode->cs_vSend)");
         LOCK(pnode->cs_vSend);
-        PROFBREND(lockprofcsvsend);
         bool optimisticSend(pnode->vSendMsg.empty());
         PROFBR(optimisticSend ? "optimisticSend" : "!optimisticSend");
 
