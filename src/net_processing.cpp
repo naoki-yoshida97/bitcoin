@@ -1842,7 +1842,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             // Recursively process any orphan transactions that depended on this one
             std::set<NodeId> setMisbehaving;
             while (!vWorkQueue.empty()) {
-                PROFBR("vWorkQueue[" + std::to_string(vWorkQueue.size()) + "]");
+                PROFBR("vWorkQueue[]");
                 auto itByPrev = mapOrphanTransactionsByPrev.find(vWorkQueue.front());
                 vWorkQueue.pop_front();
                 if (itByPrev == mapOrphanTransactionsByPrev.end())
