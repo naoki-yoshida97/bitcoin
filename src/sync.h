@@ -106,6 +106,21 @@ typedef boost::condition_variable CConditionVariable;
 void PrintLockContention(const char* pszName, const char* pszFile, int nLine);
 #endif
 
+class BitcoinProfiler {
+private:
+    const std::string component;
+    const uint64_t start;
+public:
+    uint64_t bandwidth;
+    BitcoinProfiler* parent;
+
+    BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent = false, bool lockProfile = false);
+    ~BitcoinProfiler();
+    static void UsedBandwidth(uint64_t bytes);
+    static bool IsLoaded();
+    static bool ShouldProfileLock();
+};
+
 /** Wrapper around boost::unique_lock<Mutex> */
 template <typename Mutex>
 class SCOPED_LOCKABLE CMutexLock
@@ -115,6 +130,7 @@ private:
 
     void Enter(const char* pszName, const char* pszFile, int nLine)
     {
+        BitcoinProfiler* lockProfiler = BitcoinProfiler::ShouldProfileLock() && BitcoinProfiler::IsLoaded() ? new BitcoinProfiler(std::string("LOCK(") + pszName + ")", true, true) : nullptr;
         EnterCritical(pszName, pszFile, nLine, (void*)(lock.mutex()));
 #ifdef DEBUG_LOCKCONTENTION
         if (!lock.try_lock()) {
@@ -124,6 +140,7 @@ private:
 #ifdef DEBUG_LOCKCONTENTION
         }
 #endif
+        if (lockProfiler) delete lockProfiler;
     }
 
     bool TryEnter(const char* pszName, const char* pszFile, int nLine)

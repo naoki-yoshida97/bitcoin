@@ -1057,12 +1057,23 @@ void BitcoinProfilerSanityCheck() {
 std::map<const std::string,BitcoinProfilerComponent> bpcomps;
 // BitcoinProfiler* currentProfiler = nullptr;
 
-std::map<std::thread::id,BitcoinProfiler*> currentProfilers;
+struct BitcoinProfilerThread {
+    BitcoinProfiler* currentProfiler;
+    std::atomic_bool profiling;
+};
+
+std::map<std::thread::id,BitcoinProfilerThread> currentProfilers;
 BitcoinProfiler* getCurrentProfiler() {
-    return currentProfilers[std::this_thread::get_id()];
+    return currentProfilers[std::this_thread::get_id()].currentProfiler;
 }
 void setCurrentProfiler(BitcoinProfiler* p) {
-    currentProfilers[std::this_thread::get_id()] = p;
+    currentProfilers[std::this_thread::get_id()].currentProfiler = p;
+}
+bool getProfilingFlag() {
+    return currentProfilers[std::this_thread::get_id()].profiling;
+}
+void setProfilingFlag(bool v) {
+    currentProfilers[std::this_thread::get_id()].profiling = v;
 }
 
 void BitcoinProfilerShowStats() {
@@ -1151,21 +1162,29 @@ uint64_t rdtsc(){
 
 // }
 
-BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent)
+static bool loadProfiler = true;
+
+BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent, bool lockProfile)
 : component(getCurrentProfiler() ? strprintf("%s.%s", getCurrentProfiler()->component, componentIn) : componentIn),
   start(shareTimeWithParent && getCurrentProfiler() ? getCurrentProfiler()->start : rdtsc()),
   bandwidth(0),
   parent(getCurrentProfiler()) {
+    setProfilingFlag(true);
     setCurrentProfiler(this);
-    static bool loadProfiler = true;
     if (loadProfiler) {
-        printf("BitcoinProfilerLoad()\n");
-        loadProfiler = false;
-        BitcoinProfilerLoad();
+        static bool doLoad = true;
+        if (doLoad) {
+            doLoad = false;
+            printf("BitcoinProfilerLoad()\n");
+            BitcoinProfilerLoad();
+            loadProfiler = false;
+        }
     }
+    setProfilingFlag(false);
 }
 
 BitcoinProfiler::~BitcoinProfiler() {
+    setProfilingFlag(true);
     bpcomps[component].append(rdtsc() - start);
     if (bandwidth) {
         if (parent) parent->bandwidth += bandwidth;
@@ -1173,9 +1192,20 @@ BitcoinProfiler::~BitcoinProfiler() {
     }
     assert(getCurrentProfiler() == this);
     setCurrentProfiler(parent);
+    setProfilingFlag(false);
 }
 
 void BitcoinProfiler::UsedBandwidth(uint64_t bytes)
 {
     if (getCurrentProfiler()) getCurrentProfiler()->bandwidth += bytes;
+}
+
+bool BitcoinProfiler::IsLoaded()
+{
+    return !loadProfiler;
+}
+
+bool BitcoinProfiler::ShouldProfileLock()
+{
+    return !getProfilingFlag();
 }
