@@ -1086,8 +1086,9 @@ void BitcoinProfilerShowStats() {
     }
     for (const auto& comp : bpcomps) {
         const BitcoinProfilerComponent& c = comp.second;
-        printf("%8.5f %16llu %16llu %16llu %16llu %8u %s\n",
-            c.proportionOf(h, l), c.min, c.max, c.med(), c.bandwidth/c.count, c.count, comp.first.c_str());
+        if (c.count > 0)
+            printf("%8.5f %16llu %16llu %16llu %16llu %8u %s\n",
+                c.proportionOf(h, l), c.min, c.max, c.med(), c.bandwidth/c.count, c.count, comp.first.c_str());
     }
 }
 
