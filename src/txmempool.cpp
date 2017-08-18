@@ -823,6 +823,7 @@ CTransactionRef CTxMemPool::get(const uint256& hash) const
 
 TxMempoolInfo CTxMemPool::info(const uint256& hash) const
 {
+    PROFBR("CTxMemPool::info()");
     LOCK(cs);
     indexed_transaction_set::const_iterator i = mapTx.find(hash);
     if (i == mapTx.end())
