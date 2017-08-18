@@ -1129,6 +1129,7 @@ void CConnman::ThreadSocketHandler()
     unsigned int nPrevNodeCount = 0;
     while (!interruptNet)
     {
+        PROF("CConnman::ThreadSocketHandler()");
         //
         // Disconnect nodes
         //
