@@ -3171,6 +3171,10 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             // Determine transactions to relay
             if (fSendTrickle) {
                 PROFBR("trickle (tx-relay)");
+                static int64_t nInvTrickleTimeSum = 0; // sum of time spent here
+                static int64_t nInvTrickleCount = 0;   // sum of size of vInv
+                static int64_t nInvTricklePasses = 0;  // # of times we entered this part of the code
+                int64_t nInvTrickleTimeStart = GetTimeMicros();
                 // Produce a vector with all candidates for sending
                 std::vector<std::set<uint256>::iterator> vInvTx;
                 vInvTx.reserve(pto->setInventoryTxToSend.size());
@@ -3191,6 +3195,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 unsigned int nRelayedTransactions = 0;
                 LOCK(pto->cs_filter);
                 printf("TX RELAY: %lu size vInvTx\n", vInvTx.size());
+                nInvTrickleCount += vInvTx.size();
                 while (!vInvTx.empty() && nRelayedTransactions < INVENTORY_BROADCAST_MAX) {
                     // Fetch the top element from the heap
                     std::pop_heap(vInvTx.begin(), vInvTx.end(), compareInvMempoolOrder);
@@ -3233,6 +3238,12 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                         vInv.clear();
                     }
                     pto->filterInventoryKnown.insert(hash);
+                }
+                int64_t nInvTrickleTimeEnd = GetTimeMicros();
+                nInvTrickleTimeSum += (nInvTrickleTimeEnd - nInvTrickleTimeStart);
+                nInvTricklePasses++;
+                if (nInvTricklePasses % 100 == 0) {
+                    LogPrint(BCLog::BENCH, "    - inv.trickle: %.2fμs/tx [%.2f txs/pass]\n", (float)nInvTrickleTimeSum / nInvTrickleCount, (float)nInvTrickleCount / nInvTricklePasses);
                 }
             }
         }
