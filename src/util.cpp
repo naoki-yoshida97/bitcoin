@@ -964,6 +964,8 @@ struct BitcoinProfilerComponent {
         uint16_t vCyclesSize = vCycles.size();
         fwrite(&vCyclesSize, sizeof(uint16_t), 1, fp);
         fwrite(&vCycles[0], sizeof(uint64_t), vCyclesSize, fp);
+        fwrite(&vCyclesHigh, sizeof(uint64_t), 1, fp);
+        fwrite(&vCyclesLow, sizeof(uint64_t), 1, fp);
         fwrite(&bandwidth, sizeof(uint64_t), 1, fp);
     }
     void deserialize(FILE* fp) {
@@ -972,6 +974,8 @@ struct BitcoinProfilerComponent {
         fread(&vCyclesSize, sizeof(uint16_t), 1, fp);
         vCycles.resize(vCyclesSize);
         fread(&vCycles[0], sizeof(uint64_t), vCyclesSize, fp);
+        fread(&vCyclesHigh, sizeof(uint64_t), 1, fp);
+        fread(&vCyclesLow, sizeof(uint64_t), 1, fp);
         fread(&bandwidth, sizeof(uint64_t), 1, fp);
         sumCyclesHigh = sumCyclesLow = 0;
         for (uint64_t cycles : vCycles) {
