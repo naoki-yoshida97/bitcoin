@@ -130,7 +130,7 @@ private:
 
     void Enter(const char* pszName, const char* pszFile, int nLine)
     {
-        BitcoinProfiler* lockProfiler = BitcoinProfiler::ShouldProfileLock() && BitcoinProfiler::IsLoaded() ? new BitcoinProfiler(std::string("LOCK(") + pszName + "L" + std::to_string(nLine) + ")", true, true) : nullptr;
+        BitcoinProfiler* lockProfiler = BitcoinProfiler::ShouldProfileLock() && BitcoinProfiler::IsLoaded() ? new BitcoinProfiler(std::string("LOCK(") + pszName + "<" + pszFile + "#" + std::to_string(nLine) + ">)", true, true) : nullptr;
         EnterCritical(pszName, pszFile, nLine, (void*)(lock.mutex()));
 #ifdef DEBUG_LOCKCONTENTION
         if (!lock.try_lock()) {
