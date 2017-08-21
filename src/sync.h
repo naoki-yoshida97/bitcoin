@@ -109,7 +109,7 @@ void PrintLockContention(const char* pszName, const char* pszFile, int nLine);
 class BitcoinProfiler {
 private:
     const std::string component;
-    const uint64_t start;
+    const int64_t start;
 public:
     uint64_t bandwidth;
     BitcoinProfiler* parent;

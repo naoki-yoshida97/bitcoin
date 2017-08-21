@@ -909,9 +909,9 @@ CCriticalSection m_bp;
 // #define LOCKx(m,c) if (c) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr; if (c) printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
 
 struct BitcoinProfilerComponent {
-    std::vector<uint64_t> vCycles;
-    uint64_t sumCyclesHigh;
-    uint64_t sumCyclesLow;
+    std::vector<uint64_t> vTime;
+    uint64_t sumTimeHigh;
+    uint64_t sumTimeLow;
     uint64_t count;
     uint64_t bandwidth;
 
@@ -919,31 +919,31 @@ struct BitcoinProfilerComponent {
     uint64_t max;
 
     BitcoinProfilerComponent()
-    : sumCyclesHigh(0),
-      sumCyclesLow(0),
+    : sumTimeHigh(0),
+      sumTimeLow(0),
       count(0),
       bandwidth(0),
       min(0xffffffffffffffffull),
       max(0)
     {}
-    void append(uint64_t cycles, bool push = true) {
+    void append(int64_t ms, bool push = true) {
         // LOCKx(m_bp, push);
         // std::lock_guard<std::mutex>* lock = push ? new std::lock_guard<std::mutex>(m_bp) : nullptr;
         // We will never have a high increase over more than one,
         // and low will always end up smaller when it overflows.
         //  0x0ff + 0x0ff = 0x1fe   (ff > fe)
         //  0x001 + 0x0ff = 0x100   (01 > 00)
-        sumCyclesHigh += (cycles + sumCyclesLow) < sumCyclesLow;
-        sumCyclesLow += cycles;
-        if (cycles < min) min = cycles;
-        if (cycles > max) max = cycles;
+        sumTimeHigh += (ms + sumTimeLow) < sumTimeLow;
+        sumTimeLow += ms;
+        if (ms < min) min = ms;
+        if (ms > max) max = ms;
         if (push) {
             {
                 LOCK(m_bp);
                 count++;
-                vCycles.push_back(cycles);
-                if (vCycles.size() > 2000) {
-                    std::vector<decltype(vCycles)::value_type>(vCycles.begin()+vCycles.size()-1000, vCycles.end()).swap(vCycles);
+                vTime.push_back(ms);
+                if (vTime.size() > 2000) {
+                    std::vector<decltype(vTime)::value_type>(vTime.begin()+vTime.size()-1000, vTime.end()).swap(vTime);
                 }
             }
             BitcoinProfilerSynchronize();
@@ -951,46 +951,46 @@ struct BitcoinProfilerComponent {
     }
     void populate(uint64_t& high, uint64_t& low) const {
         LOCK(m_bp);
-        high += sumCyclesHigh + ((low + sumCyclesLow) < low);
-        low += sumCyclesLow;
+        high += sumTimeHigh + ((low + sumTimeLow) < low);
+        low += sumTimeLow;
     }
     bool operator<(const BitcoinProfilerComponent& b) const {
-        return sumCyclesHigh < b.sumCyclesHigh ||
-               (sumCyclesHigh == b.sumCyclesHigh &&
-                sumCyclesLow < b.sumCyclesLow);
+        return sumTimeHigh < b.sumTimeHigh ||
+               (sumTimeHigh == b.sumTimeHigh &&
+                sumTimeLow < b.sumTimeLow);
     }
     void serialize(FILE* fp) const {
         fwrite(&count, sizeof(uint64_t), 1, fp);
-        uint16_t vCyclesSize = vCycles.size();
-        fwrite(&vCyclesSize, sizeof(uint16_t), 1, fp);
-        fwrite(&vCycles[0], sizeof(uint64_t), vCyclesSize, fp);
-        fwrite(&sumCyclesHigh, sizeof(uint64_t), 1, fp);
-        fwrite(&sumCyclesLow, sizeof(uint64_t), 1, fp);
+        uint16_t vTimeSize = vTime.size();
+        fwrite(&vTimeSize, sizeof(uint16_t), 1, fp);
+        fwrite(&vTime[0], sizeof(uint64_t), vTimeSize, fp);
+        fwrite(&sumTimeHigh, sizeof(uint64_t), 1, fp);
+        fwrite(&sumTimeLow, sizeof(uint64_t), 1, fp);
         fwrite(&bandwidth, sizeof(uint64_t), 1, fp);
     }
     void deserialize(FILE* fp) {
         fread(&count, sizeof(uint64_t), 1, fp);
-        uint16_t vCyclesSize;
-        fread(&vCyclesSize, sizeof(uint16_t), 1, fp);
-        vCycles.resize(vCyclesSize);
-        fread(&vCycles[0], sizeof(uint64_t), vCyclesSize, fp);
-        fread(&sumCyclesHigh, sizeof(uint64_t), 1, fp);
-        fread(&sumCyclesLow, sizeof(uint64_t), 1, fp);
+        uint16_t vTimeSize;
+        fread(&vTimeSize, sizeof(uint16_t), 1, fp);
+        vTime.resize(vTimeSize);
+        fread(&vTime[0], sizeof(uint64_t), vTimeSize, fp);
+        fread(&sumTimeHigh, sizeof(uint64_t), 1, fp);
+        fread(&sumTimeLow, sizeof(uint64_t), 1, fp);
         fread(&bandwidth, sizeof(uint64_t), 1, fp);
-        sumCyclesHigh = sumCyclesLow = 0;
-        for (uint64_t cycles : vCycles) {
+        sumTimeHigh = sumTimeLow = 0;
+        for (uint64_t cycles : vTime) {
             append(cycles, false);
         }
     }
     uint64_t med() const {
         LOCK(m_bp);
         assert(count > 0);
-        if (sumCyclesHigh == 0) {
-            return sumCyclesLow / count;
+        if (sumTimeHigh == 0) {
+            return sumTimeLow / count;
         }
         double dc = count;
-        uint64_t th = sumCyclesHigh;
-        uint64_t tl = sumCyclesLow;
+        uint64_t th = sumTimeHigh;
+        uint64_t tl = sumTimeLow;
         // shift rightward until we run out of high cycles
         while (th && dc >= 2) {
             dc /= 2;                        // 0babc                -> 0bab.c
@@ -1008,7 +1008,7 @@ struct BitcoinProfilerComponent {
     //     uint64_t myu = med();
     //     long double variance = 0.0;
     //     printf("- variance = 0.0\n");
-    //     for (uint64_t cycles : vCycles) {
+    //     for (uint64_t cycles : vTime) {
     //         long double diff = (int64_t)cycles - (int64_t)myu;
     //         variance += diff * diff;
     //         printf("- variance += (%Lf^2 == %Lf) == %Lf\n", diff, diff*diff, variance);
@@ -1020,8 +1020,8 @@ struct BitcoinProfilerComponent {
         LOCK(m_bp);
         // we want to return local h|l divided by h|l, which is in range [0.00, 1.00]
         // always holds: h >= local h
-        uint64_t lh = sumCyclesHigh;
-        uint64_t ll = sumCyclesLow;
+        uint64_t lh = sumTimeHigh;
+        uint64_t ll = sumTimeLow;
         // we want to push rightward until both highs are 0
         while (lh > 0 || h > 0) {
             ll = (ll >> 1) | (lh << 63);
@@ -1041,13 +1041,13 @@ void BitcoinProfilerSanityCheck() {
     c.append(0xffffffffffffffffull);
     assert(c.min == 0xffffffffffffffffull);
     assert(c.max == 0xffffffffffffffffull);
-    assert(c.sumCyclesLow == 0xffffffffffffffffull);
-    assert(c.sumCyclesHigh == 0);
+    assert(c.sumTimeLow == 0xffffffffffffffffull);
+    assert(c.sumTimeHigh == 0);
     c.append(1);
     assert(c.min == 1);
     assert(c.max == 0xffffffffffffffffull);
-    assert(c.sumCyclesLow == 0);
-    assert(c.sumCyclesHigh == 1);
+    assert(c.sumTimeLow == 0);
+    assert(c.sumTimeHigh == 1);
     assert(c.proportionOf(1, 0) == 1);
     assert(c.med() == 0x8000000000000000);
     // assert(c.stddev() > 0x6fffffffffffffff && c.stddev() < 0x8fffffffffffffff);
@@ -1059,7 +1059,7 @@ void BitcoinProfilerSanityCheck() {
     }
     assert(d.min == 0xffffffffffffffffull);
     assert(d.max == 0xffffffffffffffffull);
-    assert(Approximately(e.proportionOf(d.sumCyclesHigh, d.sumCyclesLow), 0.01));
+    assert(Approximately(e.proportionOf(d.sumTimeHigh, d.sumTimeLow), 0.01));
     // assert(Approximately(d.stddev(), 0));
 }
 
@@ -1118,7 +1118,7 @@ void BitcoinProfilerLoad() {
             char buf[len];
             fread(buf, 1, len, fp);
             bpcomps[buf].deserialize(fp);
-            printf("got %s [%u, %u]\n", buf, bpcomps[buf].count, bpcomps[buf].vCycles.size());
+            printf("got %s [%u, %u]\n", buf, bpcomps[buf].count, bpcomps[buf].vTime.size());
         }
         fclose(fp);
     }
@@ -1148,35 +1148,35 @@ void BitcoinProfilerSynchronize() {
     }
 }
 
-// Source: https://stackoverflow.com/questions/13772567/get-cpu-cycle-count
-// {
-
-//  Windows
-#ifdef _WIN32
-
-#include <intrin.h>
-uint64_t rdtsc(){
-    return __rdtsc();
-}
-
-//  Linux/GCC
-#else
-
-uint64_t rdtsc(){
-    unsigned int lo,hi;
-    __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
-    return ((uint64_t)hi << 32) | lo;
-}
-
-#endif
-
+// // Source: https://stackoverflow.com/questions/13772567/get-cpu-cycle-count
+// // {
+// 
+// //  Windows
+// #ifdef _WIN32
+// 
+// #include <intrin.h>
+// uint64_t rdtsc(){
+//     return __rdtsc();
 // }
+// 
+// //  Linux/GCC
+// #else
+// 
+// uint64_t rdtsc(){
+//     unsigned int lo,hi;
+//     __asm__ __volatile__ ("rdtsc" : "=a" (lo), "=d" (hi));
+//     return ((uint64_t)hi << 32) | lo;
+// }
+// 
+// #endif
+// 
+// // }
 
 static bool loadProfiler = true;
 
 BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent, bool lockProfile)
 : component(getCurrentProfiler() ? strprintf("%s.%s", getCurrentProfiler()->component, componentIn) : componentIn),
-  start(shareTimeWithParent && getCurrentProfiler() ? getCurrentProfiler()->start : rdtsc()),
+  start(shareTimeWithParent && getCurrentProfiler() ? getCurrentProfiler()->start : GetTimeMicros()),
   bandwidth(0),
   parent(getCurrentProfiler()) {
     setProfilingFlag(true);
@@ -1195,7 +1195,7 @@ BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWi
 
 BitcoinProfiler::~BitcoinProfiler() {
     setProfilingFlag(true);
-    bpcomps[component].append(rdtsc() - start);
+    bpcomps[component].append(GetTimeMicros() - start);
     if (bandwidth) {
         if (parent) parent->bandwidth += bandwidth;
         bpcomps[component].bandwidth += bandwidth;
