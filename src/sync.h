@@ -110,6 +110,8 @@ class BitcoinProfiler {
 private:
     const std::string component;
     const int64_t start;
+    int64_t lock_start;
+    int64_t lock_time;
 public:
     uint64_t bandwidth;
     BitcoinProfiler* parent;
@@ -119,6 +121,8 @@ public:
     static void UsedBandwidth(uint64_t bytes);
     static bool IsLoaded();
     static bool ShouldProfileLock();
+    static void Locking();
+    static void Unlocking();
 };
 
 /** Wrapper around boost::unique_lock<Mutex> */
@@ -132,6 +136,7 @@ private:
     {
         // BitcoinProfiler* lockProfiler = BitcoinProfiler::ShouldProfileLock() && BitcoinProfiler::IsLoaded() ? new BitcoinProfiler(std::string("LOCK(") + pszName + "<" + pszFile + "#" + std::to_string(nLine) + ">)", true, true) : nullptr;
         EnterCritical(pszName, pszFile, nLine, (void*)(lock.mutex()));
+        BitcoinProfiler::Locking();
 #ifdef DEBUG_LOCKCONTENTION
         if (!lock.try_lock()) {
             PrintLockContention(pszName, pszFile, nLine);
@@ -140,6 +145,7 @@ private:
 #ifdef DEBUG_LOCKCONTENTION
         }
 #endif
+        BitcoinProfiler::Unlocking();
         // if (lockProfiler) delete lockProfiler;
     }
 

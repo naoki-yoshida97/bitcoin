@@ -1177,6 +1177,8 @@ static bool loadProfiler = true;
 BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWithParent, bool lockProfile)
 : component(getCurrentProfiler() ? strprintf("%s.%s", getCurrentProfiler()->component, componentIn) : componentIn),
   start(shareTimeWithParent && getCurrentProfiler() ? getCurrentProfiler()->start : GetTimeMicros()),
+  lock_start(0),
+  lock_time(0),
   bandwidth(0),
   parent(getCurrentProfiler()) {
     setProfilingFlag(true);
@@ -1194,15 +1196,15 @@ BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWi
 }
 
 BitcoinProfiler::~BitcoinProfiler() {
-    setProfilingFlag(true);
-    bpcomps[component].append(GetTimeMicros() - start);
+    // setProfilingFlag(true);
+    bpcomps[component].append(GetTimeMicros() - start - lock_time);
     if (bandwidth) {
         if (parent) parent->bandwidth += bandwidth;
         bpcomps[component].bandwidth += bandwidth;
     }
     assert(getCurrentProfiler() == this);
     setCurrentProfiler(parent);
-    setProfilingFlag(false);
+    // setProfilingFlag(false);
 }
 
 void BitcoinProfiler::UsedBandwidth(uint64_t bytes)
@@ -1218,4 +1220,16 @@ bool BitcoinProfiler::IsLoaded()
 bool BitcoinProfiler::ShouldProfileLock()
 {
     return !getProfilingFlag();
+}
+
+void BitcoinProfiler::Locking()
+{
+    auto p = getCurrentProfiler();
+    if (p) p->lock_start = GetTimeMicros();
+}
+
+void BitcoinProfiler::Unlocking()
+{
+    auto p = getCurrentProfiler();
+    if (p) p->lock_time += GetTimeMicros() - p->lock_start;
 }
