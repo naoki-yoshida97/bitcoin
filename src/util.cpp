@@ -1198,6 +1198,7 @@ BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWi
 BitcoinProfiler::~BitcoinProfiler() {
     // setProfilingFlag(true);
     bpcomps[component].append(GetTimeMicros() - start - lock_time);
+    if (parent && parent->start == start) parent->lock_time += lock_time;
     if (bandwidth) {
         if (parent) parent->bandwidth += bandwidth;
         bpcomps[component].bandwidth += bandwidth;
