@@ -1181,7 +1181,7 @@ BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWi
   lock_time(0),
   bandwidth(0),
   parent(getCurrentProfiler()) {
-    setProfilingFlag(true);
+    // setProfilingFlag(true);
     setCurrentProfiler(this);
     if (loadProfiler) {
         static bool doLoad = true;
@@ -1192,7 +1192,7 @@ BitcoinProfiler::BitcoinProfiler(const std::string componentIn, bool shareTimeWi
             loadProfiler = false;
         }
     }
-    setProfilingFlag(false);
+    // setProfilingFlag(false);
 }
 
 BitcoinProfiler::~BitcoinProfiler() {
