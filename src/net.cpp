@@ -1126,11 +1126,10 @@ void CConnman::AcceptConnection(const ListenSocket& hListenSocket) {
 
 void CConnman::ThreadSocketHandler()
 {
-    PROF("CConnman::ThreadSocketHandler()");
     unsigned int nPrevNodeCount = 0;
     while (!interruptNet)
     {
-        PROFBR("(!interruptNet)");
+        PROF("CConnman::ThreadSocketHandler()");
         //
         // Disconnect nodes
         //
