@@ -2975,6 +2975,11 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             bool fRevertToInv = ((!state.fPreferHeaders &&
                                  (!state.fPreferHeaderAndIDs || pto->vBlockHashesToAnnounce.size() > 1)) ||
                                 pto->vBlockHashesToAnnounce.size() > MAX_BLOCKS_TO_ANNOUNCE);
+            std::string rtiCause = !fRevertToInv ? "" :
+                                !state.fPreferHeaders &&
+                                (!state.fPreferHeaderAndIDs || pto->vBlockHashesToAnnounce.size() > 1)
+                                ? "no-pref-headers"
+                                : "to-announce-gt-max";
             const CBlockIndex *pBestIndex = nullptr; // last header queued for delivery
             ProcessBlockAvailability(pto->GetId()); // ensure pindexBestKnownBlock is up-to-date
 
@@ -2990,6 +2995,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     if (chainActive[pindex->nHeight] != pindex) {
                         // Bail out if we reorged away from this block
                         fRevertToInv = true;
+                        rtiCause = "reorg-bail";
                         break;
                     }
                     if (pBestIndex != nullptr && pindex->pprev != pBestIndex) {
@@ -3005,6 +3011,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                         // Robustly deal with this rare situation by reverting
                         // to an inv.
                         fRevertToInv = true;
+                        rtiCause = "blocks-not-connected";
                         break;
                     }
                     pBestIndex = pindex;
@@ -3022,6 +3029,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                         // Peer doesn't have this header or the prior one -- nothing will
                         // connect, so bail out.
                         fRevertToInv = true;
+                        rtiCause = "peer-missing-headers";
                         break;
                     }
                 }
@@ -3068,14 +3076,18 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     }
                     connman.PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
                     state.pindexBestHeaderSent = pBestIndex;
-                } else
+                } else {
+                    rtiCause = "fallback3080";
                     fRevertToInv = true;
+                }
             }
             if (fRevertToInv) {
                 // If falling back to using an inv, just try to inv the tip.
                 // The last entry in vBlockHashesToAnnounce was our tip at some point
                 // in the past.
                 PROFBR("revert-to-inv");
+                BitcoinProfiler::Flux("revert-to-inv", 1);
+                BitcoinProfiler::Flux(std::string("revert-to-inv_") + rtiCause, 1);
                 if (!pto->vBlockHashesToAnnounce.empty()) {
                     const uint256 &hashToAnnounce = pto->vBlockHashesToAnnounce.back();
                     BlockMap::iterator mi = mapBlockIndex.find(hashToAnnounce);
@@ -3194,6 +3206,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 // especially since we have many peers and some will draw much shorter delays.
                 unsigned int nRelayedTransactions = 0;
                 LOCK(pto->cs_filter);
+                BitcoinProfiler::Flux("tx-relay-queue", vInvTx.size());
                 printf("TX RELAY: %lu size vInvTx\n", vInvTx.size());
                 nInvTrickleCount += vInvTx.size();
                 while (!vInvTx.empty() && nRelayedTransactions < INVENTORY_BROADCAST_MAX) {
@@ -3239,6 +3252,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     }
                     pto->filterInventoryKnown.insert(hash);
                 }
+                BitcoinProfiler::Flux("tx-relay-actual", nRelayedTransactions);
                 int64_t nInvTrickleTimeEnd = GetTimeMicros();
                 nInvTrickleTimeSum += (nInvTrickleTimeEnd - nInvTrickleTimeStart);
                 nInvTricklePasses++;

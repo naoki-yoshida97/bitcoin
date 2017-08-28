@@ -123,6 +123,7 @@ public:
     static bool ShouldProfileLock();
     static void Locking();
     static void Unlocking();
+    static void Flux(const std::string subject, const int64_t value);
 };
 
 /** Wrapper around boost::unique_lock<Mutex> */

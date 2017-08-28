@@ -1148,6 +1148,59 @@ void BitcoinProfilerSynchronize() {
     }
 }
 
+struct BitcoinProfilerFlux {
+    std::vector<int64_t> items;
+    std::vector<int64_t> times;
+    std::string subject;
+    FILE* fp;
+    void init(const std::string subjectIn)
+    {
+        subject = subjectIn;
+        fp = fopen((std::string("/tmp/") + subject).c_str(), "wb");
+    }
+    ~BitcoinProfilerFlux()
+    {
+        fclose(fp);
+    }
+    void append(int64_t value)
+    {
+        int64_t now = GetTimeMicros();
+        items.push_back(value);
+        times.push_back(now);
+        fwrite(&now, sizeof(int64_t), 1, fp);
+        fwrite(&value, sizeof(int64_t), 1, fp);
+        if (times[0] + 60000000LL <= now) {
+            fflush(fp);
+            // shrink down to 30s
+            int64_t sum60 = 0;
+            int64_t sum1 = 0;
+            while (times.size() > 0 && times[0] + 60000000LL < now) {
+                times.pop_back();
+                items.pop_back();
+            }
+            // continue popping
+            while (times.size() > 0 && times[0] + 30000000LL < now) {
+                sum60 += items[0];
+                times.pop_back();
+                items.pop_back();
+            }
+            // grab remaining 30s
+            for (int64_t i = 0; i < times.size(); i++) {
+                sum60 += items[i];
+            }
+            // iterate backwards until we move beyond 1s mark
+            for (int64_t i = times.size() - 1; i >= 0 && times[i] + 1000000LL >= now; i--) {
+                sum1 += items[i];
+            }
+            printf("[bench::%s] %.6f/s (last 60s) / %lld/s (last 1s)\n", subject.c_str(), (double)sum60/60, sum1);
+        }
+    }
+};
+
+std::map<const std::string,BitcoinProfilerFlux> bfcomps;
+
+
+
 // // Source: https://stackoverflow.com/questions/13772567/get-cpu-cycle-count
 // // {
 // 
@@ -1233,4 +1286,12 @@ void BitcoinProfiler::Unlocking()
 {
     auto p = getCurrentProfiler();
     if (p) p->lock_time += GetTimeMicros() - p->lock_start;
+}
+
+void BitcoinProfiler::Flux(const std::string subject, const int64_t value)
+{
+    if (bfcomps.count(subject) == 0) {
+        bfcomps[subject].init(subject);
+    }
+    bfcomps[subject].append(value);
 }
