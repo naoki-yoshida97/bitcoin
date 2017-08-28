@@ -1090,7 +1090,15 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     double median = -1;
     EstimationResult tempResult;
 
-    CFeeRate mempoolFeeRate = (optimizeViaMempool ? estimateMempoolFee() : CFeeRate(0));
+    CFeeRate mempoolFeeRate;
+    if (optimizeViaMempool) {
+        int64_t timePassed = std::min<int64_t>(600, GetTime() - lastChainTipChange);
+        int64_t timeSlots = timePassed / 60; // 0..10
+
+        double mempoolFeeRatePercentile = (0.15 + 0.05 * conservative + 0.01 * (10 - timeSlots)) - confTarget * 0.01;
+
+        mempoolFeeRate = estimateMempoolFee(mempoolFeeRatePercentile);
+    }
 
     // Return failure if trying to analyze a target we're not tracking
     if (confTarget <= 0 || (unsigned int)confTarget > longStats->GetMaxConfirms()) {
