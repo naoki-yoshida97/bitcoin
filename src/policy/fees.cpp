@@ -1066,16 +1066,17 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile) const
     }
     // truncate
     feesPerK.erase(feesPerK.begin(), feesPerK.begin() + cap);
-    // pull out the fee rate at the given percentile, and also the fee rate
-    // if we moved the percentile up from the bottom; the MAX fee is the
-    // result
-    CFeeRate r = feesPerK[feesPerK.size() * percentile].feeRate;
-    CFeeRate b = feesPerK[0].feeRate;
-    CAmount fpkd = b.GetFeePerK();
-    CAmount req = fpkd + fpkd * percentile;
-    CFeeRate reqfr(req);
-    // max of the two is the resulting fee
-    return reqfr > r ? reqfr : r;
+    // // pull out the fee rate at the given percentile, and also the fee rate
+    // // if we moved the percentile up from the bottom; the MAX fee is the
+    // // result
+    CFeeRate r = feesPerK[(feesPerK.size() - 1) * (percentile < 1.0 ? percentile : 1.0)].feeRate;
+    if (percentile > 1.0) r = CFeeRate(r.GetFeePerK() * percentile);
+    // CFeeRate b = feesPerK[0].feeRate;
+    // CAmount fpkd = b.GetFeePerK();
+    // CAmount req = fpkd + fpkd * percentile;
+    // CFeeRate reqfr(req);
+    // // max of the two is the resulting fee
+    return r; // reqfr > r ? reqfr : r;
 }
 
 /** estimateSmartFee returns the max of the feerates calculated with a 60%
@@ -1102,8 +1103,8 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         int64_t timePassed = std::min<int64_t>(600, GetTime() - lastChainTipChange);
         double timeSlots = (double)timePassed / 60; // 0..10
 
-        double mempoolFeeRatePercentile = (0.15 + 0.05 * conservative + 0.02 * (10.0 - timeSlots)) - confTarget * 0.01;
-        printf("percentile = (0.15 + 0.05 * %d + 0.02 * (10.0 - %.2f)) - %d * 0.01 == %.2f\n", conservative, timeSlots, confTarget, mempoolFeeRatePercentile);
+        double mempoolFeeRatePercentile = (0.15 + 0.05 * conservative + 0.10 * (10.0 - timeSlots)) - confTarget * 0.005;
+        printf("percentile = (0.15 + 0.05 * %d + 0.08 * (10.0 - %.2f)) - %d * 0.01 == %.2f\n", conservative, timeSlots, confTarget, mempoolFeeRatePercentile);
 
         mempoolFeeRate = estimateMempoolFee(mempoolFeeRatePercentile);
     }
