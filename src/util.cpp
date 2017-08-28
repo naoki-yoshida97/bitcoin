@@ -1187,7 +1187,7 @@ struct BitcoinProfilerFlux {
             for (int64_t i = times.size() - 1; i >= 0 && times[i] + 1000000LL >= now; i--) {
                 sum1 += items[i];
             }
-            printf("[bench::%s] %.6f/s (last 60s) / %lld/s (last 1s)\n", subject.c_str(), (double)sum60/60, sum1);
+            printf("[bench::%s] %.6f/s (%lld in last 60s) | %lld/s (last 1s)\n", subject.c_str(), (double)sum60/60, sum60, sum1);
         }
     }
 };
