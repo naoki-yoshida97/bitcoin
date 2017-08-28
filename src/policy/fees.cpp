@@ -846,6 +846,13 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     longStats->UpdateMovingAverages();
 
     unsigned int countedTxs = 0;
+    printf(
+        "\n\n\n\n\n"
+        "* * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n"
+        "   block %u\n"
+        "* * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n"
+        "\n\n\n\n\n", nBlockHeight
+    );
     // Update averages with data points from current block
     std::vector<double> feesPerK;
     for (const auto& entry : entries) {
