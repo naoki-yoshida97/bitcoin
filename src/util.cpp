@@ -1170,14 +1170,14 @@ struct BitcoinProfilerFlux {
             int64_t sum60 = 0;
             int64_t sum1 = 0;
             while (times.size() > 0 && times[0] + 60000000LL < now) {
-                times.pop();
-                items.pop();
+                times.erase(times.begin());
+                items.erase(items.begin());
             }
             // continue popping
             while (times.size() > 0 && times[0] + 30000000LL < now) {
                 sum60 += items[0];
-                times.pop();
-                items.pop();
+                times.erase(times.begin());
+                items.erase(items.begin());
             }
             // grab remaining 30s
             for (int64_t i = 0; i < times.size(); i++) {
