@@ -222,7 +222,23 @@ public:
 
     /** Return a fee estimate based purely on the transactions in the mempool,
      * by calculating the fee of transactions that would go into the next block,
-     * if a block was created from the mempool state, from the transactions ordered by their fee rates.
+     * if a block was created from the mempool state, from the transactions
+     * ordered by their fee rates.
+     *
+     * The percentile is in the range 0..infinity.
+     * For percentile < 1.0, the system will find a position in the imaginary
+     * block that would place the transaction at that position in the block,
+     * fee-wise, i.e. for a percentile = 0.15, the fee rate would be the minimum
+     * fee rate that would put you above the bottom 15% of the transactions.
+     * For percentile > 1.0, the system will take the top fee transaction and
+     * return a fee rate equal to top_fee_rate * percentile, i.e. for a 1.5
+     * percentile, and a top fee of 60000 satoshis/k, 60000 * 1.5 == 90000 would
+     * be returned as the estimated fee.
+     * The reason for the second behavior is that the estimation sometimes only
+     * knows about transactions which *weren't* included in the last block, as
+     * is the case right after a new block was found. For these cases, even the
+     * top transaction in the block wouldn't suffice to get into the just made
+     * block.
      */
     CFeeRate estimateMempoolFee(double percentile = 0.15) const;
 

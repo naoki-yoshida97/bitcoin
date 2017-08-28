@@ -1100,8 +1100,9 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 
     CFeeRate mempoolFeeRate;
     if (optimizeViaMempool) {
-        int64_t timePassed = std::min<int64_t>(600, GetTime() - lastChainTipChange);
-        double timeSlots = (double)timePassed / 60; // 0..10
+        int64_t timePassed = std::min<int64_t>(720, GetTime() - lastChainTipChange);
+        double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
+        // lefty is currently running on 600 : /60 i.e. 10=10min
 
         double mempoolFeeRatePercentile = (0.15 + 0.05 * conservative + 0.10 * (10.0 - timeSlots)) - confTarget * 0.005;
         printf("percentile = (0.15 + 0.05 * %d + 0.10 * (10.0 - %.2f)) - %d * 0.005 == %.2f\n", conservative, timeSlots, confTarget, mempoolFeeRatePercentile);
