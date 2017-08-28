@@ -2978,7 +2978,9 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
             std::string rtiCause = !fRevertToInv ? "" :
                                 !state.fPreferHeaders &&
                                 (!state.fPreferHeaderAndIDs || pto->vBlockHashesToAnnounce.size() > 1)
+                                ? !state.fPreferHeaderAndIDs
                                 ? "no-pref-headers"
+                                : "block-hashes-gt-1"
                                 : "to-announce-gt-max";
             const CBlockIndex *pBestIndex = nullptr; // last header queued for delivery
             ProcessBlockAvailability(pto->GetId()); // ensure pindexBestKnownBlock is up-to-date
