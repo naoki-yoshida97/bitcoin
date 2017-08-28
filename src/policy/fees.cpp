@@ -13,6 +13,7 @@
 #include "streams.h"
 #include "txmempool.h"
 #include "util.h"
+#include "validation.h"
 
 static constexpr double INF_FEERATE = 1e99;
 
@@ -62,6 +63,124 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
     fee_estimate_mode = mode->second;
     return true;
 }
+
+struct EstimationSummary
+{
+    int64_t startTime;
+    bool conservative;
+    uint64_t estimations;
+    uint64_t overshoots;
+    uint64_t undershoots;
+    uint64_t oversum;
+    uint64_t undersum;
+    uint64_t overblocks;        // # of times we estimated X blocks and X > actual
+    uint64_t underblocks;       // # of times we estimated X blocks and X < actual
+    uint64_t overblocksum;      // sum(X - actual) for all overblocks encounters
+    uint64_t underblocksum;     // sum(actual - X) for all underblocks encounters
+    EstimationSummary(bool conservativeIn)
+    : startTime(GetTimeMicros()),
+      conservative(conservativeIn),
+      estimations(0),
+      overshoots(0),
+      undershoots(0),
+      oversum(0),
+      undersum(0),
+      overblocks(0),
+      underblocks(0),
+      overblocksum(0),
+      underblocksum(0)
+    {}
+    void log(double fee, double thresh, int desired_blocks, int resulting_blocks)
+    {
+        estimations++;
+        double overpaid = fee - thresh;
+        int overblocked = resulting_blocks - desired_blocks;
+        if (overpaid > 1) {
+            // we did indeed overpay
+            overshoots++;
+            oversum += overpaid;
+        } else if (overpaid < -1) {
+            // we undershot
+            undershoots++;
+            undersum += -overpaid;
+        }
+        if (overblocked > 0) {
+            // we ended up waiting longer than we desired to get into a block
+            overblocks++;
+            overblocksum += overblocked;
+        } else if (overblocked < 0) {
+            // we ended up waiting less blocks than we desired
+            underblocks++;
+            underblocksum += -overblocked;
+        }
+    }
+    void printstats()
+    {
+        printf(
+            "[bench::fees (%s)] %llu ests, %llu overshoots (%llu more sat/k/tx), %llu undershoots (%llu less sat/k/tx), %llu overblocks (%llu blocks/tx), %llu underblocks (%llu blocks/tx)\n",
+            conservative ? "    conservative" : "non-conservative",
+            estimations,
+            overshoots,
+            oversum / (overshoots + !overshoots),
+            undershoots,
+            undersum / (undershoots + !undershoots),
+            overblocks,
+            overblocksum / (overblocks + !overblocks),
+            underblocks,
+            underblocksum / (underblocks + !underblocks)
+        );
+    }
+};
+
+static EstimationSummary estsumC(true), estsumNC(false); // conservative and nonconservative
+
+class EstimationAttempt
+{
+private:
+    int64_t progressedBlocks;
+public:
+    bool cinblock[10]{false};
+    bool ncinblock[10]{false};
+    std::vector<double> conservativeRateVector;    // [blocks - 1] = fee rate for confirms = blocks
+    std::vector<double> nonconservativeRateVector;
+    EstimationAttempt& calculate(CBlockPolicyEstimator& bpe)
+    {
+        // we attempt estimations up to 10 blocks
+        progressedBlocks = 0;
+        for (int i = 0; i < 10; i++) {
+            conservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK());
+            nonconservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK());
+        }
+        return *this;
+    }
+    bool apply(const std::vector<double>& lastBlockFeesPerK)
+    {
+        if (lastBlockFeesPerK.size() < 10) return false; // don't look at empty blocks
+        // check all not yet in blocks
+        int nyib = 0;
+        progressedBlocks++;
+        double lowest10thresh = lastBlockFeesPerK[std::max<size_t>(10, lastBlockFeesPerK.size() / 10)]; // sorted ascending, so 0 is lowest fee seen
+        for (int i = 0; i < 10; i++) {
+            // we consider a tx to have been included if it would be higher in fee
+            // compared to the lowest-fee 10 transactions in the block
+            if (!cinblock[i]) {
+                if (lowest10thresh < conservativeRateVector[i]) {
+                    estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                    cinblock[i] = true;
+                }
+            }
+            if (!ncinblock[i]) {
+                if (lowest10thresh < nonconservativeRateVector[i]) {
+                    estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                    ncinblock[i] = true;
+                }
+            }
+            nyib += !(cinblock[i] && ncinblock[i]);
+        }
+        // return true for (0 estimations not yet in blocks i.e. !nyib)
+        return !nyib;
+    }
+};
 
 /**
  * We will instantiate an instance of this class to track transactions that were
@@ -583,15 +702,20 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     trackedTxs++;
 
     // Feerates are stored and reported as BTC-per-kb:
-    CFeeRate feeRate(entry.GetFee(), entry.GetTxSize());
+    double feePerK = CFeeRate(entry.GetFee(), entry.GetTxSize()).GetFeePerK();
 
     mapMemPoolTxs[hash].blockHeight = txHeight;
-    unsigned int bucketIndex = feeStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    unsigned int bucketIndex = feeStats->NewTx(txHeight, feePerK);
     mapMemPoolTxs[hash].bucketIndex = bucketIndex;
-    unsigned int bucketIndex2 = shortStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    unsigned int bucketIndex2 = shortStats->NewTx(txHeight, feePerK);
     assert(bucketIndex == bucketIndex2);
-    unsigned int bucketIndex3 = longStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    unsigned int bucketIndex3 = longStats->NewTx(txHeight, feePerK);
     assert(bucketIndex == bucketIndex3);
+
+    // every 100 txs we create an estimation
+    if (0 == (trackedTxs % 100)) {
+        estimationAttempts.push_back(EstimationAttempt().calculate(*this));
+    }
 }
 
 bool CBlockPolicyEstimator::processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry)
@@ -651,10 +775,21 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
 
     unsigned int countedTxs = 0;
     // Update averages with data points from current block
+    std::vector<double> feesPerK;
     for (const auto& entry : entries) {
+        feesPerK.push_back((double)entry->GetFee() * 1000.0 / entry->GetTxWeight());
         if (processBlockTx(nBlockHeight, entry))
             countedTxs++;
     }
+    std::sort(feesPerK.begin(), feesPerK.end());
+    if (feesPerK.size() > 9) {
+        printf("fees: %f, %f, %f, ..., %f\n", feesPerK[0], feesPerK[1], feesPerK[2], feesPerK.back());
+    }
+    for (auto it = estimationAttempts.begin(); it != estimationAttempts.end(); ) {
+        it = it->apply(feesPerK) ? estimationAttempts.erase(it) : it + 1;
+    }
+    estsumC.printstats();
+    estsumNC.printstats();
 
     if (firstRecordedHeight == 0 && countedTxs > 0) {
         firstRecordedHeight = nBestSeenHeight;

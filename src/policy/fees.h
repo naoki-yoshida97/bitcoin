@@ -129,6 +129,8 @@ struct FeeCalculation
     int returnedTarget = 0;
 };
 
+class EstimationAttempt;
+
 /**
  *  We want to be able to estimate feerates that are needed on tx's to be included in
  * a certain number of blocks.  Every time a block is added to the best chain, this class records
@@ -227,6 +229,8 @@ public:
 
     /** Calculation of highest target that estimates are tracked for */
     unsigned int HighestTargetTracked(FeeEstimateHorizon horizon) const;
+
+    std::vector<EstimationAttempt> estimationAttempts;
 
 private:
     unsigned int nBestSeenHeight;
