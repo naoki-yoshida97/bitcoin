@@ -1037,9 +1037,9 @@ double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget,
 
 struct FeeRatedTx {
     CFeeRate feeRate;
-    size_t bytes; 
-    FeeRatedTx(CFeeRate feeRateIn, size_t bytesIn)
-    : feeRate(feeRateIn), bytes(bytesIn) {}
+    size_t weight;
+    FeeRatedTx(CFeeRate feeRateIn, size_t weightIn)
+    : feeRate(feeRateIn), weight(weightIn) {}
     bool operator<(const FeeRatedTx& other) const { return feeRate < other.feeRate; }
 };
 
@@ -1049,19 +1049,19 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile) const
     {
         LOCK(mempool.cs);
         for (auto& entry : mempool.mapTx) {
-            feesPerK.push_back(FeeRatedTx{CFeeRate(entry.GetFee(), entry.GetTxWeight()), entry.GetTxSize()});
+            feesPerK.push_back(FeeRatedTx{CFeeRate(entry.GetFee(), entry.GetTxWeight()), entry.GetTxWeight()});
         }
     }
     if (feesPerK.size() < 100) return CFeeRate(0);
     std::sort(feesPerK.begin(), feesPerK.end());
-    // create a block by stuffing it with transactions until we hit 1 MB
-    size_t blockSize = 0;
+    // create a block by stuffing it with transactions until we hit weight limit
+    size_t blockWeight = 0;
     int64_t cap = (int64_t)feesPerK.size() - 1;
-    while (cap > 0 && blockSize < 999900) {
-        if (feesPerK[cap].bytes + blockSize >= 999900) {
+    while (cap > 0 && blockWeight < 3999900) {
+        if (feesPerK[cap].weight + blockWeight > 3999900) {
             break;
         }
-        blockSize += feesPerK[cap].bytes;
+        blockWeight += feesPerK[cap].weight;
         cap--;
     }
     // truncate
