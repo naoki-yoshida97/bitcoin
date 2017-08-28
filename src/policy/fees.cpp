@@ -1057,6 +1057,8 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile) const
         blockSize += feesPerK[cap].bytes;
         cap--;
     }
+    // truncate
+    feesPerK.erase(feesPerK.begin(), feesPerK.begin() + cap);
     // pull out the fee rate at the given percentile, and also the fee rate
     // if we moved the percentile up from the bottom; the MAX fee is the
     // result
