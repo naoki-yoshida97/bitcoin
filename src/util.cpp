@@ -1170,22 +1170,26 @@ struct BitcoinProfilerFlux {
             int64_t sum60 = 0;
             int64_t sum1 = 0;
             while (times.size() > 0 && times[0] + 60000000LL < now) {
+                printf("* popping %lld : %lld\n", times[0], items[0]);
                 times.pop_back();
                 items.pop_back();
             }
             // continue popping
             while (times.size() > 0 && times[0] + 30000000LL < now) {
                 sum60 += items[0];
+                printf("* popping & adding %lld : %lld -> %lld\n", times[0], items[0], sum60);
                 times.pop_back();
                 items.pop_back();
             }
             // grab remaining 30s
             for (int64_t i = 0; i < times.size(); i++) {
                 sum60 += items[i];
+                printf("* adding %lld : %lld -> %lld\n", times[i], items[i], sum60);
             }
             // iterate backwards until we move beyond 1s mark
             for (int64_t i = times.size() - 1; i >= 0 && times[i] + 1000000LL >= now; i--) {
                 sum1 += items[i];
+                printf("* adding (1s) %lld : %lld -> %lld\n", times[i], items[i], sum1);
             }
             printf("[bench::%s] %.6f/s (%lld in last 60s) | %lld/s (last 1s)\n", subject.c_str(), (double)sum60/60, sum60, sum1);
         }
