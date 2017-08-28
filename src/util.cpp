@@ -903,11 +903,6 @@ void BitcoinProfilerSynchronize();
 
 CCriticalSection m_bp;
 
-// #define LOCK(m) std::lock_guard<std::mutex> lock(m)
-// #define LOCKx(m,c) std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr
-// #define LOCK(m) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex> lock(m); printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
-// #define LOCKx(m,c) if (c) printf("attempting to lock " #m " (%s:%d)\n", __FILE__, __LINE__); std::lock_guard<std::mutex>* lock = c ? new std::lock_guard<std::mutex>(m) : nullptr; if (c) printf("locked " #m " (%s:%d)\n", __FILE__, __LINE__)
-
 struct BitcoinProfilerComponent {
     std::vector<uint64_t> vTime;
     uint64_t sumTimeHigh;
@@ -1288,8 +1283,11 @@ void BitcoinProfiler::Unlocking()
     if (p) p->lock_time += GetTimeMicros() - p->lock_start;
 }
 
+CCriticalSection m_bf;
+
 void BitcoinProfiler::Flux(const std::string subject, const int64_t value)
 {
+    LOCK(m_bf);
     if (bfcomps.count(subject) == 0) {
         bfcomps[subject].init(subject);
     }
