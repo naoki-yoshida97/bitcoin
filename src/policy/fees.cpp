@@ -64,10 +64,13 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
     return true;
 }
 
+static bool seenBlock = false;
+
 struct EstimationSummary
 {
     int64_t startTime;
     bool conservative;
+    bool mempoolOptim;
     uint64_t estimations;
     uint64_t overshoots;
     uint64_t undershoots;
@@ -77,9 +80,10 @@ struct EstimationSummary
     uint64_t underblocks;       // # of times we estimated X blocks and X < actual
     uint64_t overblocksum;      // sum(X - actual) for all overblocks encounters
     uint64_t underblocksum;     // sum(actual - X) for all underblocks encounters
-    EstimationSummary(bool conservativeIn)
+    EstimationSummary(bool conservativeIn, bool mempoolOptimIn)
     : startTime(GetTimeMicros()),
       conservative(conservativeIn),
+      mempoolOptim(mempoolOptimIn),
       estimations(0),
       overshoots(0),
       undershoots(0),
@@ -117,8 +121,9 @@ struct EstimationSummary
     void printstats()
     {
         printf(
-            "[bench::fees (%s)] %llu ests, %llu overshoots (%llu more sat/k/tx), %llu undershoots (%llu less sat/k/tx), %llu overblocks (%llu blocks/tx), %llu underblocks (%llu blocks/tx)\n",
+            "[bench::fees (%s|%s)] %llu ests, %llu overshoots (%llu more sat/k/tx), %llu undershoots (%llu less sat/k/tx), %llu overblocks (%llu blocks/tx), %llu underblocks (%llu blocks/tx)\n",
             conservative ? "    conservative" : "non-conservative",
+            mempoolOptim ? "    mempool" : "non-mempool",
             estimations,
             overshoots,
             oversum / (overshoots + !overshoots),
@@ -132,7 +137,11 @@ struct EstimationSummary
     }
 };
 
-static EstimationSummary estsumC(true), estsumNC(false); // conservative and nonconservative
+static EstimationSummary
+    estsumC(true, false),
+    estsumCM(true, true),
+    estsumNC(false, false), // conservative/non-conservative | mempool-optim / non-mpo
+    estsumNCM(false, true);
 
 class EstimationAttempt
 {
@@ -141,16 +150,33 @@ private:
 public:
     bool cinblock[10]{false};
     bool ncinblock[10]{false};
+    bool cminblock[10]{false};
+    bool ncminblock[10]{false};
     std::vector<double> conservativeRateVector;    // [blocks - 1] = fee rate for confirms = blocks
     std::vector<double> nonconservativeRateVector;
+    std::vector<double> conservativeRateVectorMPO;
+    std::vector<double> nonconservativeRateVectorMPO;
     EstimationAttempt& calculate(CBlockPolicyEstimator& bpe)
     {
         // we attempt estimations up to 10 blocks
         progressedBlocks = 0;
+        double min[4] = {1e99, 1e99, 1e99, 1e99};
+        double max[4] = {0};
         for (int i = 0; i < 10; i++) {
             conservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK());
             nonconservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK());
+            conservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, nullptr, true, true).GetFeePerK());
+            nonconservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, nullptr, false, true).GetFeePerK());
+            if (conservativeRateVector.back() > 1 && min[0] > conservativeRateVector.back()) min[0] = conservativeRateVector.back();
+            if (nonconservativeRateVector.back() > 1 && min[1] > nonconservativeRateVector.back()) min[1] = nonconservativeRateVector.back();
+            if (conservativeRateVectorMPO.back() > 1 && min[2] > conservativeRateVectorMPO.back()) min[2] = conservativeRateVectorMPO.back();
+            if (nonconservativeRateVectorMPO.back() > 1 && min[3] > nonconservativeRateVectorMPO.back()) min[3] = nonconservativeRateVectorMPO.back();
+            if (conservativeRateVector.back() > 1 && max[0] < conservativeRateVector.back()) max[0] = conservativeRateVector.back();
+            if (nonconservativeRateVector.back() > 1 && max[1] < nonconservativeRateVector.back()) max[1] = nonconservativeRateVector.back();
+            if (conservativeRateVectorMPO.back() > 1 && max[2] < conservativeRateVectorMPO.back()) max[2] = conservativeRateVectorMPO.back();
+            if (nonconservativeRateVectorMPO.back() > 1 && max[3] < nonconservativeRateVectorMPO.back()) max[3] = nonconservativeRateVectorMPO.back();
         }
+        printf("EstimationAttempt: mins = %.2f, %.2f, %.2f, %.2f | maxs = %.2f, %.2f, %.2f, %.2f\n", min[0], min[1], min[2], min[3], max[0], max[1], max[2], max[3]);
         return *this;
     }
     bool apply(const std::vector<double>& lastBlockFeesPerK)
@@ -164,21 +190,57 @@ public:
             // we consider a tx to have been included if it would be higher in fee
             // compared to the lowest-fee 10 transactions in the block
             if (!cinblock[i]) {
-                if (lowest10thresh < conservativeRateVector[i]) {
+                if (conservativeRateVector[i] < 0.1) {
+                    // estimation failed; abort
+                    cinblock[i] = true;
+                } else if (lowest10thresh < conservativeRateVector[i]) {
                     estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                     cinblock[i] = true;
+                } else if (i + 1 == progressedBlocks) {
+                    // record undershooting; wait for confirm
+                    estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                }
+            }
+            if (!cminblock[i]) {
+                if (conservativeRateVectorMPO[i] < 0.1) {
+                    // estimation failed; abort
+                    cminblock[i] = true;
+                } else if (lowest10thresh < conservativeRateVectorMPO[i]) {
+                    estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                    cminblock[i] = true;
+                } else if (i + 1 == progressedBlocks) {
+                    // record undershooting; wait for confirm
+                    estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
                 }
             }
             if (!ncinblock[i]) {
-                if (lowest10thresh < nonconservativeRateVector[i]) {
+                if (nonconservativeRateVector[i] < 0.1) {
+                    // estimation failed; abort
+                    ncinblock[i] = true;
+                } else if (lowest10thresh < nonconservativeRateVector[i]) {
                     estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                     ncinblock[i] = true;
+                } else if (i + 1 == progressedBlocks) {
+                    // record undershooting; wait for confirm
+                    estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                 }
             }
-            nyib += !(cinblock[i] && ncinblock[i]);
+            if (!ncminblock[i]) {
+                if (nonconservativeRateVectorMPO[i] < 0.1) {
+                    // estimation failed; abort
+                    ncminblock[i] = true;
+                } else if (lowest10thresh < nonconservativeRateVectorMPO[i]) {
+                    estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                    ncminblock[i] = true;
+                } else if (i + 1 == progressedBlocks) {
+                    // record undershooting; wait for confirm
+                    estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                }
+            }
+            nyib += !(cinblock[i] && ncinblock[i] && cminblock[i] && ncminblock[i]);
         }
         // return true for (0 estimations not yet in blocks i.e. !nyib)
-        return !nyib;
+        return !nyib || progressedBlocks > 30; // give up after 30 blocks
     }
 };
 
@@ -713,7 +775,16 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     assert(bucketIndex == bucketIndex3);
 
     // every 100 txs we create an estimation
-    if (0 == (trackedTxs % 100)) {
+    if (!seenBlock) {
+        static int64_t timeFirst = 0;
+        if (timeFirst == 0) timeFirst = GetTime();
+        if (timeFirst + 180 < GetTime()) {
+            // 3 mins have passed; consider this "seenBlock"
+            seenBlock = true;
+            printf("seenBlock -> true [forced 3min]\n");
+        }
+    }
+    if (seenBlock && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
     }
 }
@@ -749,6 +820,7 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
                                          std::vector<const CTxMemPoolEntry*>& entries)
 {
     LOCK(cs_feeEstimator);
+    seenBlock = true;
     if (nBlockHeight <= nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random
         // they don't affect the estimate.
@@ -790,6 +862,8 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     }
     estsumC.printstats();
     estsumNC.printstats();
+    estsumCM.printstats();
+    estsumNCM.printstats();
 
     if (firstRecordedHeight == 0 && countedTxs > 0) {
         firstRecordedHeight = nBestSeenHeight;
@@ -954,6 +1028,47 @@ double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget,
     return estimate;
 }
 
+struct FeeRatedTx {
+    CFeeRate feeRate;
+    size_t bytes; 
+    FeeRatedTx(CFeeRate feeRateIn, size_t bytesIn)
+    : feeRate(feeRateIn), bytes(bytesIn) {}
+    bool operator<(const FeeRatedTx& other) const { return feeRate < other.feeRate; }
+};
+
+CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile) const
+{
+    std::vector<FeeRatedTx> feesPerK;
+    {
+        LOCK(mempool.cs);
+        for (auto& entry : mempool.mapTx) {
+            feesPerK.push_back(FeeRatedTx{CFeeRate(entry.GetFee(), entry.GetTxWeight()), entry.GetTxSize()});
+        }
+    }
+    if (feesPerK.size() < 100) return CFeeRate(0);
+    std::sort(feesPerK.begin(), feesPerK.end());
+    // create a block by stuffing it with transactions until we hit 1 MB
+    size_t blockSize = 0;
+    int64_t cap = (int64_t)feesPerK.size() - 1;
+    while (cap > 0 && blockSize < 999900) {
+        if (feesPerK[cap].bytes + blockSize >= 999900) {
+            break;
+        }
+        blockSize += feesPerK[cap].bytes;
+        cap--;
+    }
+    // pull out the fee rate at the given percentile, and also the fee rate
+    // if we moved the percentile up from the bottom; the MAX fee is the
+    // result
+    CFeeRate r = feesPerK[feesPerK.size() * percentile].feeRate;
+    CFeeRate b = feesPerK[0].feeRate;
+    CAmount fpkd = b.GetFeePerK();
+    CAmount req = fpkd + fpkd * percentile;
+    CFeeRate reqfr(req);
+    // max of the two is the resulting fee
+    return reqfr > r ? reqfr : r;
+}
+
 /** estimateSmartFee returns the max of the feerates calculated with a 60%
  * threshold required at target / 2, an 85% threshold required at target and a
  * 95% threshold required at 2 * target.  Each calculation is performed at the
@@ -961,7 +1076,7 @@ double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget,
  * estimates, however, required the 95% threshold at 2 * target be met for any
  * longer time horizons also.
  */
-CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative) const
+CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative, bool optimizeViaMempool) const
 {
     LOCK(cs_feeEstimator);
 
@@ -973,9 +1088,11 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     double median = -1;
     EstimationResult tempResult;
 
+    CFeeRate mempoolFeeRate = (optimizeViaMempool ? estimateMempoolFee() : CFeeRate(0));
+
     // Return failure if trying to analyze a target we're not tracking
     if (confTarget <= 0 || (unsigned int)confTarget > longStats->GetMaxConfirms()) {
-        return CFeeRate(0);  // error condition
+        return mempoolFeeRate; // CFeeRate(0);  // error condition
     }
 
     // It's not possible to get reasonable estimates for confTarget of 1
@@ -987,7 +1104,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     }
     if (feeCalc) feeCalc->returnedTarget = confTarget;
 
-    if (confTarget <= 1) return CFeeRate(0); // error condition
+    if (confTarget <= 1) return mempoolFeeRate; //CFeeRate(0); // error condition
 
     assert(confTarget > 0); //estimateCombinedFee and estimateConservativeFee take unsigned ints
     /** true is passed to estimateCombined fee for target/2 and target so
@@ -1036,7 +1153,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 
     if (median < 0) return CFeeRate(0); // error condition
 
-    return CFeeRate(median);
+    return optimizeViaMempool && CFeeRate(median) > mempoolFeeRate ? mempoolFeeRate : CFeeRate(median);
 }
 
 

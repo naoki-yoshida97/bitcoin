@@ -208,15 +208,23 @@ public:
     /** Estimate feerate needed to get be included in a block within confTarget
      *  blocks. If no answer can be given at confTarget, return an estimate at
      *  the closest target where one can be given.  'conservative' estimates are
-     *  valid over longer time horizons also.
+     *  valid over longer time horizons also. If 'optimizeViaMempool' is set,
+     *  the fee will be trimmed downward based on the current state of the
+     *  mempool, as seen by this node.
      */
-    CFeeRate estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative) const;
+    CFeeRate estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative, bool optimizeViaMempool = false) const;
 
     /** Return a specific fee estimate calculation with a given success
      * threshold and time horizon, and optionally return detailed data about
      * calculation
      */
     CFeeRate estimateRawFee(int confTarget, double successThreshold, FeeEstimateHorizon horizon, EstimationResult *result = nullptr) const;
+
+    /** Return a fee estimate based purely on the transactions in the mempool,
+     * by calculating the fee of transactions that would go into the next block,
+     * if a block was created from the mempool state, from the transactions ordered by their fee rates.
+     */
+    CFeeRate estimateMempoolFee(double percentile = 0.15) const;
 
     /** Write estimation data to a file */
     bool Write(CAutoFile& fileout) const;
