@@ -3088,9 +3088,9 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 // The last entry in vBlockHashesToAnnounce was our tip at some point
                 // in the past.
                 PROFBR("revert-to-inv");
-                BitcoinProfiler::Flux("revert-to-inv", 1);
-                BitcoinProfiler::Flux(std::string("revert-to-inv_") + rtiCause, 1);
                 if (!pto->vBlockHashesToAnnounce.empty()) {
+                    BitcoinProfiler::Flux("revert-to-inv", 1);
+                    BitcoinProfiler::Flux(std::string("revert-to-inv_") + rtiCause, 1);
                     const uint256 &hashToAnnounce = pto->vBlockHashesToAnnounce.back();
                     BlockMap::iterator mi = mapBlockIndex.find(hashToAnnounce);
                     assert(mi != mapBlockIndex.end());
