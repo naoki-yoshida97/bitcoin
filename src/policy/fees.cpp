@@ -181,7 +181,7 @@ public:
     }
     bool apply(const std::vector<double>& lastBlockFeesPerK)
     {
-        if (lastBlockFeesPerK.size() < 10) return false; // don't look at empty blocks
+        if (lastBlockFeesPerK.size() < 100) return false; // don't look at empty blocks
         // check all not yet in blocks
         int nyib = 0;
         progressedBlocks++;
