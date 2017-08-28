@@ -3209,7 +3209,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 unsigned int nRelayedTransactions = 0;
                 LOCK(pto->cs_filter);
                 BitcoinProfiler::Flux("tx-relay-queue", vInvTx.size());
-                printf("TX RELAY: %lu size vInvTx\n", vInvTx.size());
+                // printf("TX RELAY: %lu size vInvTx\n", vInvTx.size());
                 nInvTrickleCount += vInvTx.size();
                 while (!vInvTx.empty() && nRelayedTransactions < INVENTORY_BROADCAST_MAX) {
                     // Fetch the top element from the heap
