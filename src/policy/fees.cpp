@@ -252,6 +252,7 @@ public:
             // prev should be lower, curr should be higher; we would replace prev
             if (i == 200 || (rates[i-1] < lowest10thresh && rates[i] >= lowest10thresh)) {
                 if (i == 200) fprintf(stderr, "warning: i == 200 (increase range of rates?)");
+                printf("- found optimum for %lld = %d\n", cmfc[0].tipChangeDelta, i-1);
                 estsumCM.markOptimum(((double)i - 1) / 100.0, &cmfc[0]);
                 break;
             }
