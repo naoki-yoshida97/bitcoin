@@ -242,7 +242,7 @@ public:
      * top transaction in the block wouldn't suffice to get into the just made
      * block.
      */
-    CFeeRate estimateMempoolFee(double percentile = 0.15) const;
+    CFeeRate estimateMempoolFee(double percentile = 0.15, double* ratesOut = nullptr) const;
 
     /** Write estimation data to a file */
     bool Write(CAutoFile& fileout) const;

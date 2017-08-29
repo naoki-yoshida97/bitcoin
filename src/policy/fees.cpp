@@ -66,6 +66,12 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
 
 static bool seenBlock = false;
 
+struct OptimumEntry
+{
+    double optimumPercentile;
+    int64_t lastBlockDelta;
+};
+
 struct EstimationSummary
 {
     int64_t startTime;
@@ -83,6 +89,7 @@ struct EstimationSummary
     uint32_t timeUndershots[100]; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
     uint32_t percUndershots[200]; // percentile (for mempool est) of undershots, if available; entry 0 is 0.00 and entry 199 is 1.99 or above
     uint32_t blockCountUndershots[10]; // block target of undershots, if available; entry 0 is "next block", entry 9 is "in 10 blocks"
+    std::vector<OptimumEntry> optimums;
     EstimationSummary(bool conservativeIn, bool mempoolOptimIn)
     : startTime(GetTimeMicros()),
       conservative(conservativeIn),
@@ -139,6 +146,17 @@ struct EstimationSummary
             underblocksum += -overblocked;
         }
     }
+    void markOptimum(double optimumPerc, FeeCalculation* calcExample)
+    {
+        FILE* fp = fopen("/tmp/optpercs.dat", "ab+");
+        fwrite(&optimumPerc, sizeof(double), 1, fp);
+        fwrite(&calcExample->tipChangeDelta, sizeof(int64_t), 1, fp);
+        fclose(fp);
+        optimums.emplace_back(OptimumEntry{optimumPerc, calcExample->tipChangeDelta});
+        for (const auto& opt : optimums) {
+            printf("- %lld: %.4f\n", opt.lastBlockDelta, opt.optimumPercentile);
+        }
+    }
     void printstats()
     {
         printf(
@@ -192,12 +210,15 @@ public:
     bool ncminblock[10]{false};
     FeeCalculation cmfc[10];
     FeeCalculation ncmfc[10];
+    double rates[200];
     std::vector<double> conservativeRateVector;    // [blocks - 1] = fee rate for confirms = blocks
     std::vector<double> nonconservativeRateVector;
     std::vector<double> conservativeRateVectorMPO;
     std::vector<double> nonconservativeRateVectorMPO;
     EstimationAttempt& calculate(CBlockPolicyEstimator& bpe)
     {
+        // get general mempool stats
+        bpe.estimateMempoolFee(0.15, rates);
         // we attempt estimations up to 10 blocks
         progressedBlocks = 0;
         double min[4] = {1e99, 1e99, 1e99, 1e99};
@@ -226,6 +247,15 @@ public:
         int nyib = 0;
         progressedBlocks++;
         double lowest10thresh = lastBlockFeesPerK[std::max<size_t>(10, lastBlockFeesPerK.size() / 10)]; // sorted ascending, so 0 is lowest fee seen
+        // find optimal percentage given threshold and log
+        for (int i = 1; i <= 200; i++) {
+            // prev should be lower, curr should be higher; we would replace prev
+            if (i == 200 || (rates[i-1] < lowest10thresh && rates[i] >= lowest10thresh)) {
+                if (i == 200) fprintf(stderr, "warning: i == 200 (increase range of rates?)");
+                estsumCM.markOptimum(((double)i - 1) / 100.0), &cmfc[0]);
+                break;
+            }
+        }
         for (int i = 0; i < 10; i++) {
             // we consider a tx to have been included if it would be higher in fee
             // compared to the lowest-fee 10 transactions in the block
@@ -1083,7 +1113,7 @@ struct FeeRatedTx {
     bool operator<(const FeeRatedTx& other) const { return feeRate < other.feeRate; }
 };
 
-CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile) const
+CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ratesOut) const
 {
     std::vector<FeeRatedTx> feesPerK;
     {
@@ -1106,6 +1136,16 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile) const
     }
     // truncate
     feesPerK.erase(feesPerK.begin(), feesPerK.begin() + cap);
+    // calculate fee rates if feeCalc is present
+    if (ratesOut) {
+        for (int i = 0; i < 100; i++) {
+            ratesOut[i] = feesPerK[(feesPerK.size() - 1) * ((double)i / 100.0)].feeRate.GetFeePerK();
+        }
+        double fpk = feesPerK.back().feeRate.GetFeePerK();
+        for (int i = 100; i < 200; i++) {
+            ratesOut[i] = fpk * (double)i / 100.0;
+        }
+    }
     // // pull out the fee rate at the given percentile, and also the fee rate
     // // if we moved the percentile up from the bottom; the MAX fee is the
     // // result
