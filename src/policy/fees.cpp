@@ -16,6 +16,7 @@
 #include "validation.h"
 
 static constexpr double INF_FEERATE = 1e99;
+static int64_t txSinceTipChange = 0;
 
 std::string StringForFeeEstimateHorizon(FeeEstimateHorizon horizon) {
     static const std::map<FeeEstimateHorizon, std::string> horizon_strings = {
@@ -70,6 +71,7 @@ struct OptimumEntry
 {
     double optimumPercentile;
     int64_t lastBlockDelta;
+    double txVelocity;
 };
 
 struct EstimationSummary
@@ -151,10 +153,11 @@ struct EstimationSummary
         FILE* fp = fopen("/tmp/optpercs.dat", "ab+");
         fwrite(&optimumPerc, sizeof(double), 1, fp);
         fwrite(&calcExample->tipChangeDelta, sizeof(int64_t), 1, fp);
+        fwrite(&calcExample->txVelocity, sizeof(double), 1, fp);
         fclose(fp);
-        optimums.emplace_back(OptimumEntry{optimumPerc, calcExample->tipChangeDelta});
+        optimums.emplace_back(OptimumEntry{optimumPerc, calcExample->tipChangeDelta, calcExample->txVelocity});
         for (const auto& opt : optimums) {
-            printf("- %lld: %.4f\n", opt.lastBlockDelta, opt.optimumPercentile);
+            printf("- %lld <<%.2f>>: %.4f\n", opt.lastBlockDelta, opt.txVelocity, opt.optimumPercentile);
         }
     }
     void printstats()
@@ -855,6 +858,7 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
             printf("seenBlock -> true [forced 3min]\n");
         }
     }
+    txSinceTipChange++;
     if (seenBlock && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
     }
@@ -891,6 +895,7 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
                                          std::vector<const CTxMemPoolEntry*>& entries)
 {
     LOCK(cs_feeEstimator);
+    txSinceTipChange = 0;
     seenBlock = true;
     if (nBlockHeight <= nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random
@@ -1185,15 +1190,24 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 
     CFeeRate mempoolFeeRate;
     if (optimizeViaMempool) {
-        int64_t timePassed = std::min<int64_t>(720, GetTime() - lastChainTipChange);
+        int64_t realTimePassed = GetTime() - lastChainTipChange;
+        int64_t timePassed = std::min<int64_t>(720, realTimePassed);
         double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
-        // lefty is currently running on 600 : /60 i.e. 10=10min
+        double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
 
-        double mempoolFeeRatePercentile = (0.15 + 0.05 * conservative + 0.10 * (10.0 - timeSlots)) - confTarget * 0.005;
-        if (confTarget == 1 || confTarget == 10) printf("percentile = (0.15 + 0.05 * %d + 0.10 * (10.0 - %.2f)) - %d * 0.005 == %.2f\n", conservative, timeSlots, confTarget, mempoolFeeRatePercentile);
+        double mempoolFeeRatePercentile =
+            std::max(
+                0.15,
+                0.15
+                + 0.10 * conservative
+                + txVelocity * (1.0/3) * 0.10 * (10.0 - timeSlots)  // ~1800 tx/blk on average, 1800/600 = 3/sec; at 3/sec the mempool will be the same size as previous block, assuming new block at 10 min mark
+                - confTarget * 0.005
+            );
+        if (confTarget == 1 || confTarget == 10) printf("percentile = 0.15 + 0.05 * %d + %.2f * (1.0/3) * 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f\n", conservative, txVelocity, timeSlots, confTarget, mempoolFeeRatePercentile);
         if (feeCalc) {
             feeCalc->tipChangeDelta = timePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
+            feeCalc->txVelocity = txVelocity;
         }
 
         mempoolFeeRate = estimateMempoolFee(mempoolFeeRatePercentile);
