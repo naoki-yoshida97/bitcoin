@@ -934,6 +934,10 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     if (feesPerK.size() > 9) {
         printf("fees: %f, %f, %f, ..., %f\n", feesPerK[0], feesPerK[1], feesPerK[2], feesPerK.back());
     }
+    if (feesPerK.size() > 100) {
+        double lowest10thresh = feesPerK[std::max<size_t>(10, feesPerK.size() / 10)]; // sorted ascending, so 0 is lowest fee seen
+        printf("lowest10thresh = %.6f\n", lowest10thresh);
+    }
     for (auto it = estimationAttempts.begin(); it != estimationAttempts.end(); ) {
         it = it->apply(feesPerK) ? estimationAttempts.erase(it) : it + 1;
     }
