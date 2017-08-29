@@ -156,9 +156,8 @@ struct EstimationSummary
         fwrite(&calcExample->txVelocity, sizeof(double), 1, fp);
         fclose(fp);
         optimums.emplace_back(OptimumEntry{optimumPerc, calcExample->tipChangeDelta, calcExample->txVelocity});
-        for (const auto& opt : optimums) {
-            printf("- %lld <<%.2f>>: %.4f\n", opt.lastBlockDelta, opt.txVelocity, opt.optimumPercentile);
-        }
+        OptimumEntry& opt = optimums.back();
+        printf("- %lld <<%.2f>>: %.4f\n", opt.lastBlockDelta, opt.txVelocity, opt.optimumPercentile);
     }
     void printstats()
     {
@@ -1200,10 +1199,11 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 0.15,
                 0.15
                 + 0.10 * conservative
-                + (std::log2(txVelocity) / std::log2(3)) * 0.10 * (10.0 - timeSlots)
+                + 0.10 * (std::log2(1 + txVelocity) - 2)
+                + 0.10 * (10.0 - timeSlots)
                 - confTarget * 0.005
             );
-        if (confTarget == 1 || confTarget == 10) printf("percentile = 0.15 + 0.05 * %d + (log2(%.2f) / log2(3)) * 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f\n", conservative, txVelocity, timeSlots, confTarget, mempoolFeeRatePercentile);
+        if (confTarget == 1 || confTarget == 10) printf("percentile = 0.15 + 0.10 * %d + 0.10 * (log2(1 + %.2f) - 2){%.2f} + 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f\n", conservative, txVelocity, std::log2(1 + txVelocity) - 2, timeSlots, confTarget, mempoolFeeRatePercentile);
         if (feeCalc) {
             feeCalc->tipChangeDelta = timePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
