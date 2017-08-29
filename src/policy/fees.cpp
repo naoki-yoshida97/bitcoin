@@ -80,6 +80,9 @@ struct EstimationSummary
     uint64_t underblocks;       // # of times we estimated X blocks and X < actual
     uint64_t overblocksum;      // sum(X - actual) for all overblocks encounters
     uint64_t underblocksum;     // sum(actual - X) for all underblocks encounters
+    uint32_t timeUndershots[100] = {0}; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
+    uint32_t percUndershots[200] = {0}; // percentile (for mempool est) of undershots, if available; entry 0 is 0.00 and entry 199 is 1.99 or above
+    uint32_t blockCountUndershots[10] = {0}; // block target of undershots, if available; entry 0 is "next block", entry 9 is "in 10 blocks"
     EstimationSummary(bool conservativeIn, bool mempoolOptimIn)
     : startTime(GetTimeMicros()),
       conservative(conservativeIn),
@@ -94,7 +97,7 @@ struct EstimationSummary
       overblocksum(0),
       underblocksum(0)
     {}
-    void log(double fee, double thresh, int desired_blocks, int resulting_blocks)
+    void log(double fee, double thresh, int desired_blocks, int resulting_blocks, FeeCalculation* calc = nullptr)
     {
         estimations++;
         double overpaid = fee - thresh;
@@ -107,6 +110,14 @@ struct EstimationSummary
             // we undershot
             undershoots++;
             undersum += -overpaid;
+            // also register time and perc if available
+            if (calc) {
+                int timeSlot = std::min<int>(99, (double)calc->tipChangeDelta / 7.2);
+                int perc = std::min<int>(199, calc->mempoolFeeRatePercentile * 100);
+                timeUndershots[timeSlot]++;
+                percUndershots[perc]++;
+            }
+            blockCountUndershots[desired_blocks-1]++;
         }
         if (overblocked > 0) {
             // we ended up waiting longer than we desired to get into a block
@@ -134,6 +145,23 @@ struct EstimationSummary
             underblocks,
             underblocksum / (underblocks + !underblocks)
         );
+        printf("  blkt: {");
+        for (int i = 0; i < 100; i++) {
+            if (blockCountUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)blockCountUndershots[i] / undershoots);
+        }
+        printf(" }\n");
+        if (mempoolOptim) {
+            printf("  time: {");
+            for (int i = 0; i < 100; i++) {
+                if (timeUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)timeUndershots[i] / undershoots);
+            }
+            printf(" }\n");
+            printf("  perc: {");
+            for (int i = 0; i < 200; i++) {
+                if (percUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)percUndershots[i] / undershoots);
+            }
+            printf(" }\n");
+        }
     }
 };
 
@@ -152,6 +180,8 @@ public:
     bool ncinblock[10]{false};
     bool cminblock[10]{false};
     bool ncminblock[10]{false};
+    FeeCalculation cmfc[10];
+    FeeCalculation ncmfc[10];
     std::vector<double> conservativeRateVector;    // [blocks - 1] = fee rate for confirms = blocks
     std::vector<double> nonconservativeRateVector;
     std::vector<double> conservativeRateVectorMPO;
@@ -165,16 +195,16 @@ public:
         for (int i = 0; i < 10; i++) {
             conservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK());
             nonconservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK());
-            conservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, nullptr, true, true).GetFeePerK());
-            nonconservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, nullptr, false, true).GetFeePerK());
+            conservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, &cmfc[i], true, true).GetFeePerK());
+            nonconservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, &ncmfc[i], false, true).GetFeePerK());
             if (conservativeRateVector.back() > 1 && min[0] > conservativeRateVector.back()) min[0] = conservativeRateVector.back();
             if (nonconservativeRateVector.back() > 1 && min[1] > nonconservativeRateVector.back()) min[1] = nonconservativeRateVector.back();
             if (conservativeRateVectorMPO.back() > 1 && min[2] > conservativeRateVectorMPO.back()) min[2] = conservativeRateVectorMPO.back();
             if (nonconservativeRateVectorMPO.back() > 1 && min[3] > nonconservativeRateVectorMPO.back()) min[3] = nonconservativeRateVectorMPO.back();
-            if (conservativeRateVector.back() > 1 && max[0] < conservativeRateVector.back()) max[0] = conservativeRateVector.back();
-            if (nonconservativeRateVector.back() > 1 && max[1] < nonconservativeRateVector.back()) max[1] = nonconservativeRateVector.back();
-            if (conservativeRateVectorMPO.back() > 1 && max[2] < conservativeRateVectorMPO.back()) max[2] = conservativeRateVectorMPO.back();
-            if (nonconservativeRateVectorMPO.back() > 1 && max[3] < nonconservativeRateVectorMPO.back()) max[3] = nonconservativeRateVectorMPO.back();
+            if (max[0] < conservativeRateVector.back()) max[0] = conservativeRateVector.back();
+            if (max[1] < nonconservativeRateVector.back()) max[1] = nonconservativeRateVector.back();
+            if (max[2] < conservativeRateVectorMPO.back()) max[2] = conservativeRateVectorMPO.back();
+            if (max[3] < nonconservativeRateVectorMPO.back()) max[3] = nonconservativeRateVectorMPO.back();
         }
         printf("EstimationAttempt: mins = %.2f, %.2f, %.2f, %.2f | maxs = %.2f, %.2f, %.2f, %.2f\n", min[0], min[1], min[2], min[3], max[0], max[1], max[2], max[3]);
         return *this;
@@ -210,7 +240,7 @@ public:
                     cminblock[i] = true;
                 } else if (i + 1 == progressedBlocks) {
                     // record undershooting; wait for confirm
-                    estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                    estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &cmfc[i]);
                 }
             }
             if (!ncinblock[i]) {
@@ -234,7 +264,7 @@ public:
                     ncminblock[i] = true;
                 } else if (i + 1 == progressedBlocks) {
                     // record undershooting; wait for confirm
-                    estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                    estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &ncmfc[i]);
                 }
             }
             nyib += !(cinblock[i] && ncinblock[i] && cminblock[i] && ncminblock[i]);
@@ -1106,6 +1136,10 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 
         double mempoolFeeRatePercentile = (0.15 + 0.05 * conservative + 0.10 * (10.0 - timeSlots)) - confTarget * 0.005;
         printf("percentile = (0.15 + 0.05 * %d + 0.10 * (10.0 - %.2f)) - %d * 0.005 == %.2f\n", conservative, timeSlots, confTarget, mempoolFeeRatePercentile);
+        if (feeCalc) {
+            feeCalc->tipChangeDelta = timePassed;
+            feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
+        }
 
         mempoolFeeRate = estimateMempoolFee(mempoolFeeRatePercentile);
     }

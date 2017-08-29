@@ -127,6 +127,8 @@ struct FeeCalculation
     FeeReason reason = FeeReason::NONE;
     int desiredTarget = 0;
     int returnedTarget = 0;
+    double mempoolFeeRatePercentile = -1;
+    int64_t tipChangeDelta = 0;
 };
 
 class EstimationAttempt;
