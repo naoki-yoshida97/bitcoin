@@ -156,7 +156,7 @@ struct EstimationSummary
             underblocksum / (underblocks + !underblocks)
         );
         printf("  blkt: {");
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             if (blockCountUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)blockCountUndershots[i] / undershoots);
         }
         printf(" }\n");
