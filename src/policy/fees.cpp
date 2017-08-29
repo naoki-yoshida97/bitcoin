@@ -80,9 +80,9 @@ struct EstimationSummary
     uint64_t underblocks;       // # of times we estimated X blocks and X < actual
     uint64_t overblocksum;      // sum(X - actual) for all overblocks encounters
     uint64_t underblocksum;     // sum(actual - X) for all underblocks encounters
-    uint32_t timeUndershots[100] = {0}; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
-    uint32_t percUndershots[200] = {0}; // percentile (for mempool est) of undershots, if available; entry 0 is 0.00 and entry 199 is 1.99 or above
-    uint32_t blockCountUndershots[10] = {0}; // block target of undershots, if available; entry 0 is "next block", entry 9 is "in 10 blocks"
+    uint32_t timeUndershots[100]; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
+    uint32_t percUndershots[200] // percentile (for mempool est) of undershots, if available; entry 0 is 0.00 and entry 199 is 1.99 or above
+    uint32_t blockCountUndershots[10]; // block target of undershots, if available; entry 0 is "next block", entry 9 is "in 10 blocks"
     EstimationSummary(bool conservativeIn, bool mempoolOptimIn)
     : startTime(GetTimeMicros()),
       conservative(conservativeIn),
@@ -96,7 +96,17 @@ struct EstimationSummary
       underblocks(0),
       overblocksum(0),
       underblocksum(0)
-    {}
+    {
+        for (int i = 0; i < 10; i++) {
+            timeUndershots[i] = percUndershots[i] = blockCountUndershots[i] = 0;
+        }
+        for (int i = 10; i < 100; i++) {
+            timeUndershots[i] = percUndershots[i] = 0;
+        }
+        for (int i = 100; i < 200; i++) {
+            percUndershots[i] = 0;
+        }
+    }
     void log(double fee, double thresh, int desired_blocks, int resulting_blocks, FeeCalculation* calc = nullptr)
     {
         estimations++;
