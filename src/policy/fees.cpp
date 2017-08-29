@@ -1200,10 +1200,10 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 0.15,
                 0.15
                 + 0.10 * conservative
-                + txVelocity * (1.0/30) * 0.10 * (10.0 - timeSlots)
+                + (std::log2(txVelocity) / std::log2(3)) * 0.10 * (10.0 - timeSlots)
                 - confTarget * 0.005
             );
-        if (confTarget == 1 || confTarget == 10) printf("percentile = 0.15 + 0.05 * %d + %.2f * (1.0/3) * 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f\n", conservative, txVelocity, timeSlots, confTarget, mempoolFeeRatePercentile);
+        if (confTarget == 1 || confTarget == 10) printf("percentile = 0.15 + 0.05 * %d + (log2(%.2f) / log2(3)) * 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f\n", conservative, txVelocity, timeSlots, confTarget, mempoolFeeRatePercentile);
         if (feeCalc) {
             feeCalc->tipChangeDelta = timePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
