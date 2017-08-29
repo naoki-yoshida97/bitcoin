@@ -1200,7 +1200,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 0.15,
                 0.15
                 + 0.10 * conservative
-                + txVelocity * (1.0/3) * 0.10 * (10.0 - timeSlots)  // ~1800 tx/blk on average, 1800/600 = 3/sec; at 3/sec the mempool will be the same size as previous block, assuming new block at 10 min mark
+                + txVelocity * (1.0/30) * 0.10 * (10.0 - timeSlots)
                 - confTarget * 0.005
             );
         if (confTarget == 1 || confTarget == 10) printf("percentile = 0.15 + 0.05 * %d + %.2f * (1.0/3) * 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f\n", conservative, txVelocity, timeSlots, confTarget, mempoolFeeRatePercentile);
