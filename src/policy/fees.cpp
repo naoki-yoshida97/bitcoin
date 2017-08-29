@@ -65,7 +65,7 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
     return true;
 }
 
-static bool seenBlock = false;
+static bool startEstimating = false;
 
 struct OptimumEntry
 {
@@ -848,17 +848,18 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     assert(bucketIndex == bucketIndex3);
 
     // every 100 txs we create an estimation
-    if (!seenBlock) {
+    if (!startEstimating) {
         static int64_t timeFirst = 0;
         if (timeFirst == 0) timeFirst = GetTime();
         if (timeFirst + 180 < GetTime()) {
             // 3 mins have passed; consider this "seenBlock"
-            seenBlock = true;
-            printf("seenBlock -> true [forced 3min]\n");
+            startEstimating = true;
+            txSinceTipChange = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
+            printf("Estimations started\n");
         }
     }
     txSinceTipChange++;
-    if (seenBlock && 0 == (trackedTxs % 100)) {
+    if (startEstimating && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
     }
 }
@@ -895,7 +896,6 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
 {
     LOCK(cs_feeEstimator);
     txSinceTipChange = 0;
-    seenBlock = true;
     if (nBlockHeight <= nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random
         // they don't affect the estimate.
