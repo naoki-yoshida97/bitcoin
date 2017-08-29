@@ -17,6 +17,7 @@
 
 static constexpr double INF_FEERATE = 1e99;
 static int64_t txSinceTipChange = 0;
+static double txAccFeeRateSinceTipChange = 0.0; // accumulated fee rate sum(tx.feePerK) for all tx seen since last block
 
 std::string StringForFeeEstimateHorizon(FeeEstimateHorizon horizon) {
     static const std::map<FeeEstimateHorizon, std::string> horizon_strings = {
@@ -212,7 +213,7 @@ public:
     bool ncminblock[10]{false};
     FeeCalculation cmfc[10];
     FeeCalculation ncmfc[10];
-    double rates[200];
+    double rates[300];
     std::vector<double> conservativeRateVector;    // [blocks - 1] = fee rate for confirms = blocks
     std::vector<double> nonconservativeRateVector;
     std::vector<double> conservativeRateVectorMPO;
@@ -250,11 +251,11 @@ public:
         progressedBlocks++;
         double lowest10thresh = lastBlockFeesPerK[std::max<size_t>(10, lastBlockFeesPerK.size() / 10)]; // sorted ascending, so 0 is lowest fee seen
         // find optimal percentage given threshold and log
-        for (int i = 1; i <= 200; i++) {
+        for (int i = 1; i <= 300; i++) {
             // prev should be lower, curr should be higher; we would replace prev
-            if (i == 200 || (rates[i-1] < lowest10thresh && rates[i] >= lowest10thresh)) {
-                if (i == 200) fprintf(stderr, "warning: i == 200 (increase range of rates?)");
-                printf("- found optimum for %lld = %d\n", cmfc[0].tipChangeDelta, i-1);
+            if (i == 300 || (rates[i-1] < lowest10thresh && rates[i] >= lowest10thresh)) {
+                if (i == 300) fprintf(stderr, "warning: i == 300 (increase range of rates?)");
+                printf("- found optimum for %lld = %d {%.f}\n", cmfc[0].tipChangeDelta, i-1, rates[i-1]);
                 estsumCM.markOptimum(((double)i - 1) / 100.0, &cmfc[0]);
                 break;
             }
@@ -854,11 +855,14 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
         if (timeFirst + 180 < GetTime()) {
             // 3 mins have passed; consider this "seenBlock"
             startEstimating = true;
-            txSinceTipChange = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
+            int64_t newTxCount = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
+            txAccFeeRateSinceTipChange = (txSinceTipChange * newTxCount) / (txSinceTipChange + !txSinceTipChange);
+            txSinceTipChange = newTxCount;
             printf("Estimations started\n");
         }
     }
     txSinceTipChange++;
+    txAccFeeRateSinceTipChange += feePerK;
     if (startEstimating && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
     }
@@ -896,6 +900,7 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
 {
     LOCK(cs_feeEstimator);
     txSinceTipChange = 0;
+    txAccFeeRateSinceTipChange = 0.0;
     if (nBlockHeight <= nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random
         // they don't affect the estimate.
@@ -1151,7 +1156,7 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ra
             ratesOut[i] = feesPerK[(feesPerK.size() - 1) * ((double)i / 100.0)].feeRate.GetFeePerK();
         }
         double fpk = feesPerK.back().feeRate.GetFeePerK();
-        for (int i = 100; i < 200; i++) {
+        for (int i = 100; i < 300; i++) {
             ratesOut[i] = fpk * (double)i / 100.0;
         }
     }
@@ -1193,6 +1198,9 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         int64_t timePassed = std::min<int64_t>(720, realTimePassed);
         double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
+        double txFeeRateWeightedMedian = (double)txAccFeeRateSinceTipChange / (realTimePassed + !realTimePassed) / txVelocity;
+        // we have the fee rate accumulated per transaction per second since last block
+        // 
 
         double mempoolFeeRatePercentile =
             std::max(
