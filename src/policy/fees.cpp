@@ -1046,12 +1046,15 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     longStats->UpdateMovingAverages();
 
     unsigned int countedTxs = 0;
+    uint32_t secs = uint32_t(GetTime() - finalPreviousChainTipChange);
+    uint32_t mins = secs / 60;
+    secs -= (mins * 60);
     printf(
         "\n\n\n\n\n"
         "* * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n"
-        "   block %u\n"
+        "   block %u after %02u:%02u\n"
         "* * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n"
-        "\n\n\n\n\n", nBlockHeight
+        "\n\n\n\n\n", nBlockHeight, mins, secs
     );
     // Update averages with data points from current block
     std::vector<double> feesPerK;
