@@ -166,7 +166,6 @@ public:
                 size_t size = entry.GetTxSize();
                 double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
                 size_t weight = entry.GetTxWeight();
-                printf("<><> %zu %.2f %zu\n", size, fee_per_k, weight);
                 if (fee_per_k < current_min_fee_per_k &&
                     (current_weight + weight > MAX_WEIGHT)) {
                     if (consecutiveFailures++ > 1000) break;
