@@ -983,7 +983,7 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
             txSinceTipChange = newTxCount;
             printf("Estimations started\n");
         }
-        std::vector<const CTxMemPoolEntry*>& entries;
+        std::vector<const CTxMemPoolEntry*> entries;
         g_blockstream.processBlock(entries);
     }
     txSinceTipChange++;
