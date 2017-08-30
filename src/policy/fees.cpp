@@ -87,9 +87,6 @@ struct BlockStreamEntry
     }
 };
 
-#include "../miner.h"
-#include "../chainparams.h"
-#include "../consensus/validation.h"
 class BlockStream
 {
 public:
@@ -112,7 +109,7 @@ public:
         size_t weight = entry.GetTxWeight();
         if (fee_per_k < current_min_fee_per_k &&
             (current_weight + weight > MAX_WEIGHT)) return;
-        printf("[debug:blockstream] +%.2f sat/k tx\tweight: %u+%zu\tsize: %u+%zu\n", fee_per_k, current_weight, weight, current_size, size);
+        // printf("[debug:blockstream] +%.2f sat/k tx\tweight: %u+%zu\tsize: %u+%zu\n", fee_per_k, current_weight, weight, current_size, size);
 
         entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
         current_weight += weight;
@@ -120,7 +117,7 @@ public:
         while (current_weight > MAX_WEIGHT) {
             auto it = entries.begin();
             const BlockStreamEntry& e = *it;
-            printf("[debug:blockstream] -%.2f sat/k tx\tweight: %u-%zu\tsize: %u-%zu\n", e.fee_per_k, current_weight, e.weight, current_size, e.size);
+            // printf("[debug:blockstream] -%.2f sat/k tx\tweight: %u-%zu\tsize: %u-%zu\n", e.fee_per_k, current_weight, e.weight, current_size, e.size);
             current_weight -= e.weight;
             current_size -= e.size;
             entries.erase(it);
