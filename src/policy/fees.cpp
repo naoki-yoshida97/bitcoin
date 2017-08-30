@@ -1357,8 +1357,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 0.15,
                 0.15
                 + 0.10 * conservative
-                // + 0.10 * (std::log2(1 + txVelocity) - 2)
-                + 0.10 * (10.0 - timeSlots)
+                + 0.02 * (10.0 - timeSlots)
                 - confTarget * 0.005
             );
         if (feeCalc) {
