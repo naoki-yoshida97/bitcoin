@@ -126,6 +126,7 @@ public:
             entries.erase(it);
         }
         current_min_fee_per_k = entries.begin()->fee_per_k;
+        assert(min_fee_start < current_min_fee_per_k);
     }
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
         if (txe.size()) {
