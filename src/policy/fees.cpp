@@ -193,10 +193,10 @@ public:
         time_start = GetTime();
     }
     double minFeeVelocity() {
-        int64_t timevel = (GetTime() - time_start);
-        timevel += !timevel;
-        if (timevel < 10) return sqrt(double(current_min_fee_per_k - min_fee_start) / timevel);
-        return double(current_min_fee_per_k - min_fee_start) / timevel;
+        int64_t timediff = (GetTime() - time_start);
+        timediff += !timediff;
+        if (timediff < 10) return sqrt(double(current_min_fee_per_k - min_fee_start) / timediff);
+        return double(current_min_fee_per_k - min_fee_start) / timediff;
     }
 };
 
@@ -1302,6 +1302,7 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ra
                 it++; pos++;
             }
             ratesOut[i] = it->fee_per_k;
+            printf("%d: %f\n", i, it->fee_per_k);
         }
         double fpk = g_blockstream.entries.rbegin()->fee_per_k;
         for (int i = 100; i < 300; i++) {
@@ -1316,13 +1317,10 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ra
         pos > 0;
         pos--) it++;
     double r = it->fee_per_k;
+    it++;
+    if (it != g_blockstream.entries.end()) assert(it->fee_per_k > r);
     if (percentile > 1.0) r *= percentile;
-    // CFeeRate b = feesPerK[0].feeRate;
-    // CAmount fpkd = b.GetFeePerK();
-    // CAmount req = fpkd + fpkd * percentile;
-    // CFeeRate reqfr(req);
-    // // max of the two is the resulting fee
-    return CFeeRate(r); // reqfr > r ? reqfr : r;
+    return CFeeRate(r);
 }
 
 /** estimateSmartFee returns the max of the feerates calculated with a 60%
@@ -1357,7 +1355,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 0.15,
                 0.15
                 + 0.10 * conservative
-                + 0.02 * (10.0 - timeSlots)
+                + 0.10 * (10.0 - timeSlots)
                 - confTarget * 0.005
             );
         if (feeCalc) {
