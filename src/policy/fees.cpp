@@ -966,6 +966,8 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     unsigned int bucketIndex3 = longStats->NewTx(txHeight, feePerK);
     assert(bucketIndex == bucketIndex3);
 
+    g_blockstream.processTransaction(entry);
+
     // every 100 txs we create an estimation
     if (!startEstimating) {
         static int64_t timeFirst = 0;
@@ -1073,6 +1075,7 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     estsumNC.printstats();
     estsumCM.printstats();
     estsumNCM.printstats();
+    g_blockstream.processBlock(entries);
 
     if (firstRecordedHeight == 0 && countedTxs > 0) {
         firstRecordedHeight = nBestSeenHeight;
@@ -1237,43 +1240,50 @@ double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget,
     return estimate;
 }
 
-struct FeeRatedTx {
-    CFeeRate feeRate;
-    size_t weight;
-    FeeRatedTx(CFeeRate feeRateIn, size_t weightIn)
-    : feeRate(feeRateIn), weight(weightIn) {}
-    bool operator<(const FeeRatedTx& other) const { return feeRate < other.feeRate; }
-};
+// struct FeeRatedTx {
+//     CFeeRate feeRate;
+//     size_t weight;
+//     FeeRatedTx(CFeeRate feeRateIn, size_t weightIn)
+//     : feeRate(feeRateIn), weight(weightIn) {}
+//     bool operator<(const FeeRatedTx& other) const { return feeRate < other.feeRate; }
+// };
 
 CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ratesOut) const
 {
-    std::vector<FeeRatedTx> feesPerK;
-    {
-        LOCK(mempool.cs);
-        for (auto& entry : mempool.mapTx) {
-            feesPerK.push_back(FeeRatedTx{CFeeRate(entry.GetFee(), entry.GetTxWeight()), entry.GetTxWeight()});
-        }
-    }
-    if (feesPerK.size() < 100) return CFeeRate(0);
-    std::sort(feesPerK.begin(), feesPerK.end());
-    // create a block by stuffing it with transactions until we hit weight limit
-    size_t blockWeight = 0;
-    int64_t cap = (int64_t)feesPerK.size() - 1;
-    while (cap > 0 && blockWeight < 3999900) {
-        if (feesPerK[cap].weight + blockWeight > 3999900) {
-            break;
-        }
-        blockWeight += feesPerK[cap].weight;
-        cap--;
-    }
-    // truncate
-    feesPerK.erase(feesPerK.begin(), feesPerK.begin() + cap);
+    // std::vector<FeeRatedTx> feesPerK;
+    // {
+    //     LOCK(mempool.cs);
+    //     for (auto& entry : mempool.mapTx) {
+    //         feesPerK.push_back(FeeRatedTx{CFeeRate(entry.GetFee(), entry.GetTxWeight()), entry.GetTxWeight()});
+    //     }
+    // }
+    // if (feesPerK.size() < 100) return CFeeRate(0);
+    if (g_blockstream.entries.size() < 100) return CFeeRate(0);
+    // std::sort(feesPerK.begin(), feesPerK.end());
+    // // create a block by stuffing it with transactions until we hit weight limit
+    // size_t blockWeight = 0;
+    // int64_t cap = (int64_t)feesPerK.size() - 1;
+    // while (cap > 0 && blockWeight < 3999900) {
+    //     if (feesPerK[cap].weight + blockWeight > 3999900) {
+    //         break;
+    //     }
+    //     blockWeight += feesPerK[cap].weight;
+    //     cap--;
+    // }
+    // // truncate
+    // feesPerK.erase(feesPerK.begin(), feesPerK.begin() + cap);
     // calculate fee rates if feeCalc is present
     if (ratesOut) {
+        auto it = g_blockstream.entries.begin();
+        int pos = 0;
         for (int i = 0; i < 100; i++) {
-            ratesOut[i] = feesPerK[(feesPerK.size() - 1) * ((double)i / 100.0)].feeRate.GetFeePerK();
+            int next_pos = (g_blockstream.entries.size() - 1) * ((double)i / 100.0);
+            while (pos < next_pos) {
+                it++; pos++;
+            }
+            ratesOut[i] = it->fee_per_k;
         }
-        double fpk = feesPerK.back().feeRate.GetFeePerK();
+        double fpk = g_blockstream.entries.rbegin()->fee_per_k;
         for (int i = 100; i < 300; i++) {
             ratesOut[i] = fpk * (double)i / 100.0;
         }
@@ -1281,14 +1291,18 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ra
     // // pull out the fee rate at the given percentile, and also the fee rate
     // // if we moved the percentile up from the bottom; the MAX fee is the
     // // result
-    CFeeRate r = feesPerK[(feesPerK.size() - 1) * (percentile < 1.0 ? percentile : 1.0)].feeRate;
-    if (percentile > 1.0) r = CFeeRate(r.GetFeePerK() * percentile);
+    auto it = g_blockstream.entries.begin();
+    for (int pos = (g_blockstream.entries.size() - 1) * (percentile < 1.0 ? percentile : 1.0);
+        pos > 0;
+        pos--) it++;
+    double r = it->fee_per_k;
+    if (percentile > 1.0) r *= percentile;
     // CFeeRate b = feesPerK[0].feeRate;
     // CAmount fpkd = b.GetFeePerK();
     // CAmount req = fpkd + fpkd * percentile;
     // CFeeRate reqfr(req);
     // // max of the two is the resulting fee
-    return r; // reqfr > r ? reqfr : r;
+    return CFeeRate(r); // reqfr > r ? reqfr : r;
 }
 
 /** estimateSmartFee returns the max of the feerates calculated with a 60%
