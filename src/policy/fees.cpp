@@ -68,6 +68,124 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
 
 static bool startEstimating = false;
 
+struct BlockStreamEntry
+{
+    uint256 txid;
+    size_t size;
+    size_t weight;
+    double fee_per_k;
+    BlockStreamEntry(uint256 txid_in, size_t size_in=0, size_t weight_in=0, double fee_per_k_in=0.0)
+    : txid(txid_in),
+      size(size_in),
+      weight(weight_in),
+      fee_per_k(fee_per_k_in)
+    {}
+    friend bool operator<(const BlockStreamEntry& a, const BlockStreamEntry& b) {
+        return a.txid != b.txid &&
+            (a.fee_per_k < b.fee_per_k ||
+             (a.fee_per_k == b.fee_per_k && a.weight > b.weight));
+    }
+};
+
+#include "../miner.h"
+#include "../chainparams.h"
+#include "../consensus/validation.h"
+class BlockStream
+{
+public:
+    static const uint32_t MAX_SIZE = 999800;
+    static const uint32_t MAX_WEIGHT = MAX_SIZE * 4;
+    std::set<BlockStreamEntry> entries;
+    double current_min_fee_per_k;
+    uint32_t current_weight;
+    uint32_t current_size;
+    BlockStream()
+    : current_min_fee_per_k(0.0)
+    , current_weight(0)
+    , current_size(0)
+    {}
+
+    void processTransaction(const CTxMemPoolEntry& entry) {
+        uint256 txid = entry.GetTx().GetHash();
+        if (entries.count(BlockStreamEntry{txid})) return; // duplicate entry
+        size_t size = entry.GetTxSize();
+        double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
+        size_t weight = entry.GetTxWeight();
+        if (fee_per_k < current_min_fee_per_k &&
+            (current_weight + weight > MAX_WEIGHT || current_size + size > MAX_SIZE)) return;
+        printf("[debug:blockstream] +%.2f sat/k tx\tweight: %u+%zu\tsize: %u+%zu\n", fee_per_k, current_weight, weight, current_size, size);
+
+        entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
+        current_weight += weight;
+        current_size += size;
+        while (current_weight > MAX_WEIGHT || current_size > MAX_SIZE) {
+            auto it = entries.begin();
+            const BlockStreamEntry& e = *it;
+            printf("[debug:blockstream] -%.2f sat/k tx\tweight: %u-%zu\tsize: %u-%zu\n", e.fee_per_k, current_weight, e.weight, current_size, e.size);
+            current_weight -= e.weight;
+            current_size -= e.size;
+            entries.erase(it);
+        }
+        current_min_fee_per_k = entries.begin()->fee_per_k;
+    }
+    void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
+        // create set of held txids
+        std::set<uint256> txids;
+        for (auto& e : entries) {
+            txids.insert(e.txid);
+        }
+        size_t hits = 0;
+        size_t count = txe.size();
+        for (auto& e : txe) {
+            uint256 txid = e->GetTx().GetHash();
+            if (txids.count(txid)) {
+                hits++;
+                // entries.erase(BlockStreamEntry{txid});
+            }
+        }
+        // if (hits > 0) {
+        //     // recalculate weight and size and min fee
+        //     current_min_fee_per_k = entries.begin()->fee_per_k;
+        //     current_weight = current_size = 0;
+        //     for (auto& e : entries) {
+        //         current_weight += e.weight;
+        //         current_size += e.size;
+        //     }
+        // }
+        printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block\n", hits, count, 100.0 * hits / count);
+        entries.clear();
+        CScript scriptDummy = CScript() << OP_TRUE;
+        auto pblocktemplate = BlockAssembler(Params()).CreateNewBlock(scriptDummy, true);
+        CBlock* pblock = &pblocktemplate->block;
+        int i = 0;
+        current_weight = current_size = 0;
+        for (const auto& it : pblock->vtx) {
+            const CTransaction& tx = *it;
+            if (tx.IsCoinBase())
+                continue;
+            i++;
+
+            uint256 txid = tx.GetHash();
+            CAmount fee = pblocktemplate->vTxFees[i];
+            size_t weight = GetTransactionWeight(tx);
+            size_t size = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
+            double fee_per_k = CFeeRate(fee, weight).GetFeePerK();
+            entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
+            current_weight += weight;
+            current_size += size;
+        }
+        current_min_fee_per_k = entries.begin()->fee_per_k;
+        printf("[debug:blockstream] new block stream state via block template assembly: size=%u, weight=%u, min fee/k=%.2f\n",
+            current_size, current_weight, current_min_fee_per_k);
+        // try to fill block stream from mempool
+        // CompareInvMempoolOrder compareInvMempoolOrder(&mempool);
+        // std::make_heap(vInvTx.begin(), vInvTx.end(), compareInvMempoolOrder);
+        // std::pop_heap(vInvTx.begin(), vInvTx.end(), compareInvMempoolOrder);
+    }
+};
+
+static BlockStream g_blockstream;
+
 struct OptimumEntry
 {
     double optimumPercentile;
@@ -1198,7 +1316,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         int64_t timePassed = std::min<int64_t>(720, realTimePassed);
         double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
-        double txFeeRateWeightedMedian = (double)txAccFeeRateSinceTipChange / (realTimePassed + !realTimePassed) / txVelocity;
+        // double txFeeRateWeightedMedian = (double)txAccFeeRateSinceTipChange / (realTimePassed + !realTimePassed) / txVelocity;
         // we have the fee rate accumulated per transaction per second since last block
         // 
 
