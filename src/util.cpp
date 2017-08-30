@@ -1123,7 +1123,7 @@ void BitcoinProfilerLoad() {
 void BitcoinProfilerSynchronize() {
     static int64_t lastSync = 0;
     int64_t now = GetTime();
-    if (lastSync + 600 < now) {
+    if (lastSync + 3600 < now) {
         {
             LOCK(m_bp);
             printf("BitcoinProfilerSynchronize()\n");
