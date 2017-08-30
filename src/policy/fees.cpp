@@ -1302,7 +1302,6 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ra
                 it++; pos++;
             }
             ratesOut[i] = it->fee_per_k;
-            printf("%d: %f\n", i, it->fee_per_k);
         }
         double fpk = g_blockstream.entries.rbegin()->fee_per_k;
         for (int i = 100; i < 300; i++) {
