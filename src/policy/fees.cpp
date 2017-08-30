@@ -1348,7 +1348,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     if (optimizeViaMempool) {
         int64_t realTimePassed = GetTime() - lastChainTipChange;
         int64_t timePassed = std::min<int64_t>(720, realTimePassed);
-        int64_t estTimeLeft = std::max<int64_t>(60, lastChainTipChange + 600 - realTimePassed);
+        int64_t estTimeLeft = std::max<int64_t>(60, 600 - realTimePassed);
         double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         // double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
 
