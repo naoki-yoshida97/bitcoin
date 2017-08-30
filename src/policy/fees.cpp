@@ -93,8 +93,7 @@ struct BlockStreamEntry
 class BlockStream
 {
 public:
-    static const uint32_t MAX_SIZE = 999800;
-    static const uint32_t MAX_WEIGHT = MAX_SIZE * 4;
+    static const uint32_t MAX_WEIGHT = 3999200;
     std::set<BlockStreamEntry> entries;
     double current_min_fee_per_k;
     uint32_t current_weight;
@@ -112,13 +111,13 @@ public:
         double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
         size_t weight = entry.GetTxWeight();
         if (fee_per_k < current_min_fee_per_k &&
-            (current_weight + weight > MAX_WEIGHT || current_size + size > MAX_SIZE)) return;
+            (current_weight + weight > MAX_WEIGHT)) return;
         printf("[debug:blockstream] +%.2f sat/k tx\tweight: %u+%zu\tsize: %u+%zu\n", fee_per_k, current_weight, weight, current_size, size);
 
         entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
         current_weight += weight;
         current_size += size;
-        while (current_weight > MAX_WEIGHT || current_size > MAX_SIZE) {
+        while (current_weight > MAX_WEIGHT) {
             auto it = entries.begin();
             const BlockStreamEntry& e = *it;
             printf("[debug:blockstream] -%.2f sat/k tx\tweight: %u-%zu\tsize: %u-%zu\n", e.fee_per_k, current_weight, e.weight, current_size, e.size);
@@ -141,48 +140,56 @@ public:
                 uint256 txid = e->GetTx().GetHash();
                 if (txids.count(txid)) {
                     hits++;
-                    // entries.erase(BlockStreamEntry{txid});
+                    entries.erase(BlockStreamEntry{txid});
                 }
             }
-            // if (hits > 0) {
-            //     // recalculate weight and size and min fee
-            //     current_min_fee_per_k = entries.begin()->fee_per_k;
-            //     current_weight = current_size = 0;
-            //     for (auto& e : entries) {
-            //         current_weight += e.weight;
-            //         current_size += e.size;
-            //     }
-            // }
+            if (hits > 0) {
+                // recalculate weight and size and min fee
+                current_min_fee_per_k = entries.begin()->fee_per_k;
+                current_weight = current_size = 0;
+                for (auto& e : entries) {
+                    current_weight += e.weight;
+                    current_size += e.size;
+                }
+            }
             printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block\n", hits, count, 100.0 * hits / count);
         }
-        entries.clear();
-        CScript scriptDummy = CScript() << OP_TRUE;
-        auto pblocktemplate = BlockAssembler(Params()).CreateNewBlock(scriptDummy, true);
-        CBlock* pblock = &pblocktemplate->block;
-        int i = 0;
-        current_weight = current_size = 0;
-        for (const auto& it : pblock->vtx) {
-            const CTransaction& tx = *it;
-            if (tx.IsCoinBase())
-                continue;
-            i++;
 
-            uint256 txid = tx.GetHash();
-            CAmount fee = pblocktemplate->vTxFees[i];
-            size_t weight = GetTransactionWeight(tx);
-            size_t size = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
-            double fee_per_k = CFeeRate(fee, weight).GetFeePerK();
-            entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
-            current_weight += weight;
-            current_size += size;
+        uint32_t consecutiveFailures = 0;
+
+        {
+            LOCK(mempool.cs);
+            for (auto entry : mempool.mapTx.get<ancestor_score>()) {
+                // First try to find a new transaction in mapTx to evaluate.
+                uint256 txid = entry.GetTx().GetHash();
+                if (entries.count(BlockStreamEntry{txid})) continue; // duplicate entry
+                size_t size = entry.GetTxSize();
+                double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
+                size_t weight = entry.GetTxWeight();
+                printf("<><> %zu %.2f %zu\n", size, fee_per_k, weight);
+                if (fee_per_k < current_min_fee_per_k &&
+                    (current_weight + weight > MAX_WEIGHT)) {
+                    if (consecutiveFailures++ > 1000) break;
+                    continue;
+                }
+                // Insert
+                consecutiveFailures = 0;
+                entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
+                current_weight += weight;
+                current_size += size;
+                while (current_weight > MAX_WEIGHT) {
+                    auto it = entries.begin();
+                    const BlockStreamEntry& e = *it;
+                    current_weight -= e.weight;
+                    current_size -= e.size;
+                    entries.erase(it);
+                }
+                current_min_fee_per_k = entries.begin()->fee_per_k;
+            }
         }
-        current_min_fee_per_k = entries.begin()->fee_per_k;
-        printf("[debug:blockstream] new block stream state via block template assembly: size=%u, weight=%u, min fee/k=%.2f\n",
+
+        printf("[debug:blockstream] new block stream state: size=%u, weight=%u, min fee/k=%.2f\n",
             current_size, current_weight, current_min_fee_per_k);
-        // try to fill block stream from mempool
-        // CompareInvMempoolOrder compareInvMempoolOrder(&mempool);
-        // std::make_heap(vInvTx.begin(), vInvTx.end(), compareInvMempoolOrder);
-        // std::pop_heap(vInvTx.begin(), vInvTx.end(), compareInvMempoolOrder);
     }
 };
 
