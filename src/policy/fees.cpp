@@ -129,30 +129,32 @@ public:
         current_min_fee_per_k = entries.begin()->fee_per_k;
     }
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
-        // create set of held txids
-        std::set<uint256> txids;
-        for (auto& e : entries) {
-            txids.insert(e.txid);
-        }
-        size_t hits = 0;
-        size_t count = txe.size();
-        for (auto& e : txe) {
-            uint256 txid = e->GetTx().GetHash();
-            if (txids.count(txid)) {
-                hits++;
-                // entries.erase(BlockStreamEntry{txid});
+        if (txe.size()) {
+            // create set of held txids
+            std::set<uint256> txids;
+            for (auto& e : entries) {
+                txids.insert(e.txid);
             }
+            size_t hits = 0;
+            size_t count = txe.size();
+            for (auto& e : txe) {
+                uint256 txid = e->GetTx().GetHash();
+                if (txids.count(txid)) {
+                    hits++;
+                    // entries.erase(BlockStreamEntry{txid});
+                }
+            }
+            // if (hits > 0) {
+            //     // recalculate weight and size and min fee
+            //     current_min_fee_per_k = entries.begin()->fee_per_k;
+            //     current_weight = current_size = 0;
+            //     for (auto& e : entries) {
+            //         current_weight += e.weight;
+            //         current_size += e.size;
+            //     }
+            // }
+            printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block\n", hits, count, 100.0 * hits / count);
         }
-        // if (hits > 0) {
-        //     // recalculate weight and size and min fee
-        //     current_min_fee_per_k = entries.begin()->fee_per_k;
-        //     current_weight = current_size = 0;
-        //     for (auto& e : entries) {
-        //         current_weight += e.weight;
-        //         current_size += e.size;
-        //     }
-        // }
-        printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block\n", hits, count, 100.0 * hits / count);
         entries.clear();
         CScript scriptDummy = CScript() << OP_TRUE;
         auto pblocktemplate = BlockAssembler(Params()).CreateNewBlock(scriptDummy, true);
@@ -966,10 +968,11 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     unsigned int bucketIndex3 = longStats->NewTx(txHeight, feePerK);
     assert(bucketIndex == bucketIndex3);
 
-    g_blockstream.processTransaction(entry);
-
-    // every 100 txs we create an estimation
-    if (!startEstimating) {
+    if (startEstimating) {
+        // we skip mempool until we are actually estimating to avoid the slow-down when
+        // loading the mempool txs
+        g_blockstream.processTransaction(entry);
+    } else {
         static int64_t timeFirst = 0;
         if (timeFirst == 0) timeFirst = GetTime();
         if (timeFirst + 180 < GetTime()) {
@@ -980,9 +983,12 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
             txSinceTipChange = newTxCount;
             printf("Estimations started\n");
         }
+        std::vector<const CTxMemPoolEntry*>& entries;
+        g_blockstream.processBlock(entries);
     }
     txSinceTipChange++;
     txAccFeeRateSinceTipChange += feePerK;
+    // every 100 txs we create an estimation
     if (startEstimating && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
     }
