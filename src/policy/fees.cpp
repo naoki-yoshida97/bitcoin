@@ -988,9 +988,9 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
             txAccFeeRateSinceTipChange = (txSinceTipChange * newTxCount) / (txSinceTipChange + !txSinceTipChange);
             txSinceTipChange = newTxCount;
             printf("Estimations started\n");
+            std::vector<const CTxMemPoolEntry*> entries;
+            g_blockstream.processBlock(entries);
         }
-        std::vector<const CTxMemPoolEntry*> entries;
-        g_blockstream.processBlock(entries);
     }
     txSinceTipChange++;
     txAccFeeRateSinceTipChange += feePerK;
