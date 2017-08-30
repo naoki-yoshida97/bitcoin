@@ -17,7 +17,6 @@
 
 static constexpr double INF_FEERATE = 1e99;
 static int64_t txSinceTipChange = 0;
-static double txAccFeeRateSinceTipChange = 0.0; // accumulated fee rate sum(tx.feePerK) for all tx seen since last block
 
 std::string StringForFeeEstimateHorizon(FeeEstimateHorizon horizon) {
     static const std::map<FeeEstimateHorizon, std::string> horizon_strings = {
@@ -993,7 +992,6 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
             // 3 mins have passed; consider this "seenBlock"
             startEstimating = true;
             int64_t newTxCount = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
-            txAccFeeRateSinceTipChange = (txSinceTipChange * newTxCount) / (txSinceTipChange + !txSinceTipChange);
             txSinceTipChange = newTxCount;
             printf("Estimations started\n");
             std::vector<const CTxMemPoolEntry*> entries;
@@ -1001,7 +999,6 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
         }
     }
     txSinceTipChange++;
-    txAccFeeRateSinceTipChange += feePerK;
     // every 100 txs we create an estimation
     if (startEstimating && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
@@ -1040,7 +1037,6 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
 {
     LOCK(cs_feeEstimator);
     txSinceTipChange = 0;
-    txAccFeeRateSinceTipChange = 0.0;
     if (nBlockHeight <= nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random
         // they don't affect the estimate.
@@ -1354,8 +1350,6 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         int64_t estTimeLeft = std::max<int64_t>(60, lastChainTipChange + 600 - realTimePassed);
         double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         // double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
-        // double txFeeRateWeightedMedian = (double)txAccFeeRateSinceTipChange / (realTimePassed + !realTimePassed) / txVelocity;
-        // we have the fee rate accumulated per transaction per second since last block
 
         double mempoolFeeRatePercentile =
             std::max(
