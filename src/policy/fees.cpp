@@ -68,6 +68,12 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
 }
 
 static bool startEstimating = false;
+static const char* roller = "|/-\\";
+static uint8_t rpos = 0;
+static inline void roll() {
+    printf("%c\b", roller[rpos++]);
+    rpos -= rpos * (rpos > 3);
+}
 
 struct BlockStreamEntry
 {
@@ -161,6 +167,7 @@ public:
     void processTransaction(const CTxMemPoolEntry& entry) {
         uint256 txid = entry.GetTx().GetHash();
         if (entries.count(BlockStreamEntry{txid})) return; // duplicate entry
+        roll();
         size_t size = entry.GetTxSize();
         double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
         size_t weight = entry.GetTxWeight();
@@ -185,6 +192,7 @@ public:
         min_fee_start = std::min(min_fee_start, current_min_fee_per_k);
     }
     void registerTransaction(const CTxMemPoolEntry& entry) {
+        roll();
         size_t size = entry.GetTxSize();
         double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
         size_t weight = entry.GetTxWeight();
