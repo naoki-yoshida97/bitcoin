@@ -73,7 +73,7 @@ static uint8_t rpos = 0;
 static inline void roll() {
     printf("%s\b", roller[rpos++]);
     fflush(stdout);
-    rpos -= rpos * (rpos > 13);
+    rpos -= rpos * (rpos > 12);
 }
 
 struct BlockStreamEntry
