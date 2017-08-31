@@ -72,6 +72,7 @@ static const char* roller = "|/-\\";
 static uint8_t rpos = 0;
 static inline void roll() {
     printf("%c\b", roller[rpos++]);
+    fflush(stdout);
     rpos -= rpos * (rpos > 3);
 }
 
