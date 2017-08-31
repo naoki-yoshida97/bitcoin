@@ -68,12 +68,12 @@ bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_esti
 }
 
 static bool startEstimating = false;
-static const char* roller[] = {"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"}; //"|/-\\";
+static const char* roller = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static uint8_t rpos = 0;
 static inline void roll() {
-    printf("%s\b", roller[rpos++]);
+    printf("%c\b", roller[rpos++]);
     fflush(stdout);
-    rpos -= rpos * (rpos > 12);
+    rpos -= rpos * (rpos >= strlen(roller));
 }
 
 struct BlockStreamEntry
