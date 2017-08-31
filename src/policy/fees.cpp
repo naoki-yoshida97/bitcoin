@@ -97,6 +97,9 @@ struct BlockStreamEntry
             sequence = hashSeqMap[txid] = ++sequenceCounter;
         }
     }
+    double fee() const {
+        return fee_per_k / weight;
+    }
     friend bool operator<(const BlockStreamEntry& a, const BlockStreamEntry& b) {
         return a.txid != b.txid &&
             (a.fee_per_k < b.fee_per_k ||
@@ -147,6 +150,7 @@ public:
     static const uint32_t MAX_WEIGHT = 3999200;
     std::set<BlockStreamEntry> entries;
     double current_min_fee_per_k;
+    int64_t current_sum;
     uint32_t current_weight;
     uint32_t current_size;
     double min_fee_start;
@@ -179,6 +183,7 @@ public:
         // printf("[debug:blockstream] +%.2f sat/k tx\tweight: %u+%zu\tsize: %u+%zu\n", fee_per_k, current_weight, weight, current_size, size);
 
         entries.insert(bsentry);
+        current_sum += bsentry.fee();
         current_weight += weight;
         current_size += size;
         while (current_weight > MAX_WEIGHT) {
@@ -187,6 +192,7 @@ public:
             // printf("[debug:blockstream] -%.2f sat/k tx\tweight: %u-%zu\tsize: %u-%zu\n", e.fee_per_k, current_weight, e.weight, current_size, e.size);
             current_weight -= e.weight;
             current_size -= e.size;
+            current_sum -= e.fee();
             entries.erase(it);
         }
         current_min_fee_per_k = entries.begin()->fee_per_k;
@@ -202,6 +208,7 @@ public:
     }
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
         if (txe.size()) {
+            int64_t my_fees = current_sum;
             // create set of held txids
             std::set<uint256> txids;
             for (auto& e : entries) {
@@ -209,16 +216,19 @@ public:
             }
             size_t hits = 0;
             size_t count = txe.size();
+            int64_t block_fees = 0;
             for (auto& e : txe) {
                 uint256 txid = e->GetTx().GetHash();
                 size_t size = e->GetTxSize();
                 double fee_per_k = CFeeRate(e->GetFee(), size).GetFeePerK();
                 size_t weight = e->GetTxWeight();
                 BlockStreamEntry f{txid, size, weight, fee_per_k};
+                block_fees += f.fee(); // we don't use e->GetFee() in case it distinguishes from fee() somehow
                 f.registerState(BlockStreamEntry::STATE_CONFIRM);
                 auto it = std::find(entries.begin(), entries.end(), f);
                 if (it != entries.end()) {
                     hits++;
+                    current_sum -= f.fee();
                     entries.erase(it);
                 }
             }
@@ -226,12 +236,14 @@ public:
                 // recalculate weight and size and min fee
                 current_min_fee_per_k = entries.begin()->fee_per_k;
                 current_weight = current_size = 0;
+                current_sum = 0;
                 for (auto& e : entries) {
                     current_weight += e.weight;
                     current_size += e.size;
+                    current_sum += e.fee();
                 }
             }
-            printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block\n", hits, count, 100.0 * hits / count);
+            printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block (%lld / %lld fee sum [%lld diff them minus us])\n", hits, count, 100.0 * hits / count, my_fees, block_fees, block_fees - my_fees);
         }
 
         uint32_t consecutiveFailures = 0;
