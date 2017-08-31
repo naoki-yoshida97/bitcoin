@@ -186,6 +186,8 @@ extern bool fEnableReplacement;
 extern int64_t lastChainTipChange;
 /** The state of lastChainTipChange when the current tip was found */
 extern int64_t finalPreviousChainTipChange;
+/** True if the mempool has been loaded from disk */
+extern bool mempoolLoaded;
 
 /** Block hash whose ancestors we will assume to have valid scripts without checking them. */
 extern uint256 hashAssumeValid;

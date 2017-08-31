@@ -83,6 +83,7 @@ int64_t nMaxTipAge = DEFAULT_MAX_TIP_AGE;
 bool fEnableReplacement = DEFAULT_ENABLE_REPLACEMENT;
 int64_t lastChainTipChange = GetTime();
 int64_t finalPreviousChainTipChange = lastChainTipChange;
+bool mempoolLoaded = false;
 
 uint256 hashAssumeValid;
 
@@ -4281,6 +4282,7 @@ bool LoadMempool(void)
     CAutoFile file(filestr, SER_DISK, CLIENT_VERSION);
     if (file.IsNull()) {
         LogPrintf("Failed to open mempool file from disk. Continuing anyway.\n");
+        mempoolLoaded = true;
         return false;
     }
 
@@ -4293,6 +4295,7 @@ bool LoadMempool(void)
         uint64_t version;
         file >> version;
         if (version != MEMPOOL_DUMP_VERSION) {
+            mempoolLoaded = true;
             return false;
         }
         uint64_t num;
@@ -4332,10 +4335,12 @@ bool LoadMempool(void)
         }
     } catch (const std::exception& e) {
         LogPrintf("Failed to deserialize mempool data on disk: %s. Continuing anyway.\n", e.what());
+        mempoolLoaded = true;
         return false;
     }
 
     LogPrintf("Imported mempool transactions from disk: %i successes, %i failed, %i expired\n", count, failed, skipped);
+    mempoolLoaded = true;
     return true;
 }
 

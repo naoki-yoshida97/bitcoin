@@ -986,18 +986,14 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
         // we skip mempool until we are actually estimating to avoid the slow-down when
         // loading the mempool txs
         g_blockstream.processTransaction(entry);
-    } else {
-        static int64_t timeFirst = 0;
-        if (timeFirst == 0) timeFirst = GetTime();
-        if (timeFirst + 180 < GetTime()) {
-            // 3 mins have passed; consider this "seenBlock"
-            startEstimating = true;
-            int64_t newTxCount = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
-            txSinceTipChange = newTxCount;
-            printf("Estimations started\n");
-            std::vector<const CTxMemPoolEntry*> entries;
-            g_blockstream.processBlock(entries);
-        }
+    } else if (mempoolLoaded) {
+        // 3 mins have passed; consider this "seenBlock"
+        startEstimating = true;
+        int64_t newTxCount = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
+        txSinceTipChange = newTxCount;
+        printf("Estimations started\n");
+        std::vector<const CTxMemPoolEntry*> entries;
+        g_blockstream.processBlock(entries);
     }
     txSinceTipChange++;
     // every 100 txs we create an estimation
