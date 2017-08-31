@@ -17,6 +17,8 @@
 
 static constexpr double INF_FEERATE = 1e99;
 static int64_t txSinceTipChange = 0;
+static FILE* mempoolData = nullptr;
+static int64_t mempoolLastTime = 0;
 
 std::string StringForFeeEstimateHorizon(FeeEstimateHorizon horizon) {
     static const std::map<FeeEstimateHorizon, std::string> horizon_strings = {
@@ -69,22 +71,59 @@ static bool startEstimating = false;
 
 struct BlockStreamEntry
 {
+    static uint32_t sequenceCounter;
+    uint32_t sequence;
     uint256 txid;
     size_t size;
     size_t weight;
     double fee_per_k;
     BlockStreamEntry(uint256 txid_in, size_t size_in=0, size_t weight_in=0, double fee_per_k_in=0.0)
-    : txid(txid_in),
-      size(size_in),
-      weight(weight_in),
-      fee_per_k(fee_per_k_in)
+    : sequence(++sequenceCounter)
+    , txid(txid_in)
+    , size(size_in)
+    , weight(weight_in)
+    , fee_per_k(fee_per_k_in)
     {}
     friend bool operator<(const BlockStreamEntry& a, const BlockStreamEntry& b) {
         return a.txid != b.txid &&
             (a.fee_per_k < b.fee_per_k ||
              (a.fee_per_k == b.fee_per_k && a.weight > b.weight));
     }
+    friend bool operator==(const BlockStreamEntry& a, const BlockStreamEntry& b) {
+        return a.txid == b.txid;
+    }
+    static const uint8_t STATE_ENTER;
+    static const uint8_t STATE_CONFIRM;
+    static const uint8_t STATE_DISCARD;
+    static const uint8_t STATE_DELTA;
+    static const uint8_t STATE_SESSION;
+    void registerState(uint8_t state) const {
+        int64_t timestamp = GetTime();
+        if (timestamp - mempoolLastTime < 256) {
+            uint8_t tsdelta = uint8_t(timestamp - mempoolLastTime);
+            uint8_t flags = state | STATE_DELTA;
+            fwrite(&flags, 1, 1, mempoolData);
+            fwrite(&tsdelta, 1, 1, mempoolData);
+        } else {
+            fwrite(&state, 1, 1, mempoolData);
+            fwrite(&timestamp, sizeof(int64_t), 1, mempoolData);
+        }
+        fwrite(&sequence, sizeof(uint32_t), 1, mempoolData);
+        if (state == STATE_ENTER) {
+            fwrite(&weight, sizeof(size_t), 1, mempoolData);
+            fwrite(&fee_per_k, sizeof(double), 1, mempoolData);
+        }
+        mempoolLastTime = timestamp;
+        if (sequence % 100 == 0) fflush(mempoolData);
+    }
 };
+
+const uint8_t BlockStreamEntry::STATE_ENTER     = 0;
+const uint8_t BlockStreamEntry::STATE_CONFIRM   = 1;
+const uint8_t BlockStreamEntry::STATE_DISCARD   = 2;
+const uint8_t BlockStreamEntry::STATE_DELTA     = 1 << 4;
+const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
+uint32_t BlockStreamEntry::sequenceCounter = 0;
 
 class BlockStream
 {
@@ -102,7 +141,12 @@ public:
     , current_size(0)
     , min_fee_start(0)
     , time_start(0)
-    {}
+    {
+        if (mempoolData == nullptr) {
+            mempoolData = fopen("/tmp/mpstream.dat", "a+");
+            fwrite(&BlockStreamEntry::STATE_SESSION, 1, 1, mempoolData);
+        }
+    }
 
     void processTransaction(const CTxMemPoolEntry& entry) {
         uint256 txid = entry.GetTx().GetHash();
@@ -110,11 +154,13 @@ public:
         size_t size = entry.GetTxSize();
         double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
         size_t weight = entry.GetTxWeight();
+        BlockStreamEntry bsentry{txid, size, weight, fee_per_k};
+        bsentry.registerState(BlockStreamEntry::STATE_ENTER);
         if (fee_per_k < current_min_fee_per_k &&
             (current_weight + weight > MAX_WEIGHT)) return;
         // printf("[debug:blockstream] +%.2f sat/k tx\tweight: %u+%zu\tsize: %u+%zu\n", fee_per_k, current_weight, weight, current_size, size);
 
-        entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
+        entries.insert(bsentry);
         current_weight += weight;
         current_size += size;
         while (current_weight > MAX_WEIGHT) {
@@ -139,9 +185,12 @@ public:
             size_t count = txe.size();
             for (auto& e : txe) {
                 uint256 txid = e->GetTx().GetHash();
-                if (txids.count(txid)) {
+                BlockStreamEntry f{txid};
+                auto it = std::find(entries.begin(), entries.end(), f);
+                if (it != entries.end()) {
                     hits++;
-                    entries.erase(BlockStreamEntry{txid});
+                    it->registerState(BlockStreamEntry::STATE_CONFIRM);
+                    entries.erase(it);
                 }
             }
             if (hits > 0) {
