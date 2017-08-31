@@ -214,11 +214,13 @@ public:
             for (auto& e : entries) {
                 txids.insert(e.txid);
             }
+            size_t known = 0;
             size_t hits = 0;
             size_t count = txe.size();
             int64_t block_fees = 0;
             for (auto& e : txe) {
                 uint256 txid = e->GetTx().GetHash();
+                known = BlockStreamEntry::hashSeqMap.count(txid);
                 size_t size = e->GetTxSize();
                 double fee_per_k = CFeeRate(e->GetFee(), size).GetFeePerK();
                 size_t weight = e->GetTxWeight();
@@ -243,7 +245,9 @@ public:
                     current_sum += e.fee();
                 }
             }
-            printf("[bench:blockstream] block had %zu/%zu=%.2f%% items from simulated block (%lld / %lld fee sum [%lld diff them minus us])\n", hits, count, 100.0 * hits / count, my_fees, block_fees, block_fees - my_fees);
+            printf("[bench:blockstream] block had %zu/%zu=%.2f%% [%zu known=%.2f -> %.2f hits/known] items from simulated block (%lld / %lld fee sum [%lld diff them minus us])\n",
+                hits, count, 100.0 * hits / count, known, 100.0 * known / count, 100.0 * hits / known, my_fees, block_fees, block_fees - my_fees
+            );
         }
 
         uint32_t consecutiveFailures = 0;
