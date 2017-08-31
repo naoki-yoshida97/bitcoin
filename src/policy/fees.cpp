@@ -98,7 +98,7 @@ struct BlockStreamEntry
         }
     }
     double fee() const {
-        return fee_per_k / weight;
+        return fee_per_k * (double)weight / 1000.0;
     }
     friend bool operator<(const BlockStreamEntry& a, const BlockStreamEntry& b) {
         return a.txid != b.txid &&
