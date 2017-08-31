@@ -1049,9 +1049,9 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     }
     txSinceTipChange++;
     // every 100 txs we create an estimation
-    if (startEstimating && 0 == (trackedTxs % 100)) {
-        estimationAttempts.push_back(EstimationAttempt().calculate(*this));
-    }
+    // if (startEstimating && 0 == (trackedTxs % 100)) {
+    //     estimationAttempts.push_back(EstimationAttempt().calculate(*this));
+    // }
 }
 
 bool CBlockPolicyEstimator::processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry)

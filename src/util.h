@@ -329,9 +329,9 @@ std::string CopyrightHolders(const std::string& strPrefix);
 #define PASTE(x, y) x ## y
 #define PASTE2(x, y) PASTE(x, y)
 
-#define PROF(comp)   BitcoinProfiler PASTE2(prof, __COUNTER__)(comp)
-#define PROFBR(comp) BitcoinProfiler PASTE2(prof, __COUNTER__)(comp, true)
-#define PROFBRBEG(name, comp)  BitcoinProfiler* name = new BitcoinProfiler(comp, true)
-#define PROFBREND(name)        delete name
+#define PROF(comp)   //BitcoinProfiler PASTE2(prof, __COUNTER__)(comp)
+#define PROFBR(comp) //BitcoinProfiler PASTE2(prof, __COUNTER__)(comp, true)
+#define PROFBRBEG(name, comp)  //BitcoinProfiler* name = new BitcoinProfiler(comp, true)
+#define PROFBREND(name)        //delete name
 
 #endif // BITCOIN_UTIL_H
