@@ -1317,11 +1317,6 @@ CFeeRate CBlockPolicyEstimator::estimateMempoolFee(double percentile, double* ra
         pos > 0;
         pos--) it++;
     double r = it->fee_per_k;
-    it++;
-    if (it != g_blockstream.entries.end()) {
-        printf("asserting %f >= %f\n", it->fee_per_k, r);
-        assert(it->fee_per_k >= r);
-    }
     if (percentile > 1.0) r *= percentile;
     return CFeeRate(r);
 }
