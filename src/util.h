@@ -333,5 +333,6 @@ std::string CopyrightHolders(const std::string& strPrefix);
 #define PROFBR(comp) //BitcoinProfiler PASTE2(prof, __COUNTER__)(comp, true)
 #define PROFBRBEG(name, comp)  //BitcoinProfiler* name = new BitcoinProfiler(comp, true)
 #define PROFBREND(name)        //delete name
+#define PROFFLUX(subj, val) //BitcoinProfiler::Flux(subj, val)
 
 #endif // BITCOIN_UTIL_H

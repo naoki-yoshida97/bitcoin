@@ -1285,7 +1285,7 @@ void BitcoinProfiler::Unlocking()
 
 CCriticalSection m_bf;
 
-void BitcoinProfiler::Flux(const std::string subject, const int64_t value)
+void PROFFLUX(const std::string subject, const int64_t value)
 {
     LOCK(m_bf);
     if (bfcomps.count(subject) == 0) {

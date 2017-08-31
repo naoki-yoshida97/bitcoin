@@ -3089,8 +3089,8 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 // in the past.
                 PROFBR("revert-to-inv");
                 if (!pto->vBlockHashesToAnnounce.empty()) {
-                    BitcoinProfiler::Flux("revert-to-inv", 1);
-                    BitcoinProfiler::Flux(std::string("revert-to-inv_") + rtiCause, 1);
+                    PROFFLUX("revert-to-inv", 1);
+                    PROFFLUX(std::string("revert-to-inv_") + rtiCause, 1);
                     const uint256 &hashToAnnounce = pto->vBlockHashesToAnnounce.back();
                     BlockMap::iterator mi = mapBlockIndex.find(hashToAnnounce);
                     assert(mi != mapBlockIndex.end());
@@ -3208,7 +3208,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                 // especially since we have many peers and some will draw much shorter delays.
                 unsigned int nRelayedTransactions = 0;
                 LOCK(pto->cs_filter);
-                BitcoinProfiler::Flux("tx-relay-queue", vInvTx.size());
+                PROFFLUX("tx-relay-queue", vInvTx.size());
                 // printf("TX RELAY: %lu size vInvTx\n", vInvTx.size());
                 nInvTrickleCount += vInvTx.size();
                 while (!vInvTx.empty() && nRelayedTransactions < INVENTORY_BROADCAST_MAX) {
@@ -3254,7 +3254,7 @@ bool SendMessages(CNode* pto, CConnman& connman, const std::atomic<bool>& interr
                     }
                     pto->filterInventoryKnown.insert(hash);
                 }
-                BitcoinProfiler::Flux("tx-relay-actual", nRelayedTransactions);
+                PROFFLUX("tx-relay-actual", nRelayedTransactions);
                 int64_t nInvTrickleTimeEnd = GetTimeMicros();
                 nInvTrickleTimeSum += (nInvTrickleTimeEnd - nInvTrickleTimeStart);
                 nInvTricklePasses++;
