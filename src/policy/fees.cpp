@@ -101,6 +101,7 @@ struct BlockStreamEntry
     static const uint8_t STATE_ENTER;
     static const uint8_t STATE_CONFIRM;
     static const uint8_t STATE_DISCARD;
+    static const uint8_t STATE_LOAD;
     static const uint8_t STATE_DELTA;
     static const uint8_t STATE_SESSION;
     void registerState(uint8_t state) const {
@@ -115,7 +116,7 @@ struct BlockStreamEntry
             fwrite(&timestamp, sizeof(int64_t), 1, mempoolData);
         }
         fwrite(&sequence, sizeof(uint32_t), 1, mempoolData);
-        if (state == STATE_ENTER) {
+        if (state & STATE_ENTER) {
             fwrite(&weight, sizeof(size_t), 1, mempoolData);
             fwrite(&fee_per_k, sizeof(double), 1, mempoolData);
         }
@@ -124,10 +125,11 @@ struct BlockStreamEntry
     }
 };
 
-const uint8_t BlockStreamEntry::STATE_ENTER     = 0;
-const uint8_t BlockStreamEntry::STATE_CONFIRM   = 1;
-const uint8_t BlockStreamEntry::STATE_DISCARD   = 2;
-const uint8_t BlockStreamEntry::STATE_DELTA     = 1 << 4;
+const uint8_t BlockStreamEntry::STATE_ENTER     = 1 << 0;
+const uint8_t BlockStreamEntry::STATE_CONFIRM   = 1 << 1;
+const uint8_t BlockStreamEntry::STATE_DISCARD   = 1 << 2;
+const uint8_t BlockStreamEntry::STATE_DELTA     = 1 << 3;
+const uint8_t BlockStreamEntry::STATE_LOAD      = 1 << 4;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
 std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
@@ -180,6 +182,13 @@ public:
         }
         current_min_fee_per_k = entries.begin()->fee_per_k;
         min_fee_start = std::min(min_fee_start, current_min_fee_per_k);
+    }
+    void registerTransaction(const CTxMemPoolEntry& entry) {
+        size_t size = entry.GetTxSize();
+        double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
+        size_t weight = entry.GetTxWeight();
+        BlockStreamEntry bsentry{entry.GetTx().GetHash(), size, weight, fee_per_k};
+        bsentry.registerState(BlockStreamEntry::STATE_ENTER | BlockStreamEntry::STATE_LOAD);
     }
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
         if (txe.size()) {
@@ -1045,14 +1054,17 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
         // we skip mempool until we are actually estimating to avoid the slow-down when
         // loading the mempool txs
         g_blockstream.processTransaction(entry);
-    } else if (mempoolLoaded) {
-        // 3 mins have passed; consider this "seenBlock"
-        startEstimating = true;
-        int64_t newTxCount = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
-        txSinceTipChange = newTxCount;
-        printf("Estimations started\n");
-        std::vector<const CTxMemPoolEntry*> entries;
-        g_blockstream.processBlock(entries);
+    } else {
+        g_blockstream.registerTransaction(entry);
+        if (mempoolLoaded) {
+            // 3 mins have passed; consider this "seenBlock"
+            startEstimating = true;
+            int64_t newTxCount = 3 * (GetTime() - lastChainTipChange); // expect 3/s for duration we were prepping
+            txSinceTipChange = newTxCount;
+            printf("Estimations started\n");
+            std::vector<const CTxMemPoolEntry*> entries;
+            g_blockstream.processBlock(entries);
+        }
     }
     txSinceTipChange++;
     // every 100 txs we create an estimation
