@@ -185,11 +185,14 @@ public:
             size_t count = txe.size();
             for (auto& e : txe) {
                 uint256 txid = e->GetTx().GetHash();
-                BlockStreamEntry f{txid};
+                size_t size = e->GetTxSize();
+                double fee_per_k = CFeeRate(e->GetFee(), size).GetFeePerK();
+                size_t weight = e->GetTxWeight();
+                BlockStreamEntry f{txid, size, weight, fee_per_k};
+                f.registerState(BlockStreamEntry::STATE_CONFIRM);
                 auto it = std::find(entries.begin(), entries.end(), f);
                 if (it != entries.end()) {
                     hits++;
-                    it->registerState(BlockStreamEntry::STATE_CONFIRM);
                     entries.erase(it);
                 }
             }
@@ -1046,9 +1049,9 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     }
     txSinceTipChange++;
     // every 100 txs we create an estimation
-    // if (startEstimating && 0 == (trackedTxs % 100)) {
-    //     estimationAttempts.push_back(EstimationAttempt().calculate(*this));
-    // }
+    if (startEstimating && 0 == (trackedTxs % 100)) {
+        estimationAttempts.push_back(EstimationAttempt().calculate(*this));
+    }
 }
 
 bool CBlockPolicyEstimator::processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry)
