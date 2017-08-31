@@ -1357,7 +1357,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 - confTarget * 0.005
             );
         if (feeCalc) {
-            feeCalc->tipChangeDelta = timePassed;
+            feeCalc->tipChangeDelta = realTimePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
             feeCalc->minFeeVelocity = g_blockstream.minFeeVelocity();
         }
