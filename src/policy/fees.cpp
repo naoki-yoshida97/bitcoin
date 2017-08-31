@@ -1348,9 +1348,9 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     CFeeRate mempoolFeeRate;
     if (optimizeViaMempool) {
         int64_t realTimePassed = GetTime() - lastChainTipChange;
-        int64_t timePassed = std::min<int64_t>(720, realTimePassed);
+        // int64_t timePassed = std::min<int64_t>(720, realTimePassed);
         int64_t estTimeLeft = std::max<int64_t>(60, 600 - realTimePassed);
-        double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
+        // double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         // double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
 
         double mempoolFeeRatePercentile =
@@ -1358,22 +1358,21 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
                 0.15,
                 0.15
                 + 0.10 * conservative
-                + 0.10 * (10.0 - timeSlots)
+                // + 0.02 * (10.0 - timeSlots)
                 - confTarget * 0.005
             );
         if (feeCalc) {
             feeCalc->tipChangeDelta = timePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
-            // feeCalc->txVelocity = txVelocity;
             feeCalc->minFeeVelocity = g_blockstream.minFeeVelocity();
         }
 
         mempoolFeeRate = estimateMempoolFee(mempoolFeeRatePercentile);
         if (mempoolFeeRate.GetFeePerK() > 0) {
             if (confTarget == 1 || confTarget == 10) printf(
-                "percentile = 0.15 + 0.10 * %d + 0.10 * (10.0 - %.2f) - %d * 0.005 == %.2f"
+                "percentile = 0.15 + 0.10 * %d - %d * 0.005 == %.2f"
                 ": %lld + %.2f * %lld{%.2f} = %.2f\n",
-                conservative, timeSlots, confTarget, mempoolFeeRatePercentile,
+                conservative, confTarget, mempoolFeeRatePercentile,
                 mempoolFeeRate.GetFeePerK(),
                 g_blockstream.minFeeVelocity(),
                 estTimeLeft,
