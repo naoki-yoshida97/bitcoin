@@ -248,8 +248,8 @@ public:
                     current_sum += e.fee();
                 }
             }
-            printf("[bench:blockstream] block had %zu""/%zu=" "%.2f%% ["            "%zu known=%.2f%%, "             "%zu known hits -> %.2f%% hits/known hits] items from simulated block (%lld / ""%lld fee sum [%lld diff them minus us])\n"
-            ,                                     hits, count, 100.0 * hits / count, known,    100.0 * known / count, knownhits,        100.0 * hits / (knownhits + !knownhits),            my_fees, block_fees,   block_fees - my_fees
+            printf("[bench:blockstream] block had %zu""/%zu=" "%.2f%% ["            "%zu known=%.2f%%, "             "%zu known hits -> %.2f%% known hits/known] items from simulated block (%lld / ""%lld fee sum [%lld diff them minus us])\n"
+            ,                                     hits, count, 100.0 * hits / count, known,    100.0 * known / count, knownhits,        100.0 * knownhits / (known + !known),            my_fees, block_fees,   block_fees - my_fees
             );
         }
 
