@@ -152,7 +152,8 @@ public:
     , time_start(0)
     {
         if (mempoolData == nullptr) {
-            mempoolData = fopen("/tmp/mpstream.dat", "a+");
+            fs::path defaultdir = GetDefaultDataDir() / "mpstream.dat";
+            mempoolData = fsbridge::fopen(defaultdir, "a+");
             fwrite(&BlockStreamEntry::STATE_SESSION, 1, 1, mempoolData);
         }
     }
