@@ -71,6 +71,7 @@ static bool startEstimating = false;
 
 struct BlockStreamEntry
 {
+    static std::map<uint256,uint32_t> hashSeqMap;
     static uint32_t sequenceCounter;
     uint32_t sequence;
     uint256 txid;
@@ -78,12 +79,17 @@ struct BlockStreamEntry
     size_t weight;
     double fee_per_k;
     BlockStreamEntry(uint256 txid_in, size_t size_in=0, size_t weight_in=0, double fee_per_k_in=0.0)
-    : sequence(++sequenceCounter)
-    , txid(txid_in)
+    : txid(txid_in)
     , size(size_in)
     , weight(weight_in)
     , fee_per_k(fee_per_k_in)
-    {}
+    {
+        if (hashSeqMap.count(txid)) {
+            sequence = hashSeqMap[txid];
+        } else {
+            sequence = hashSeqMap[txid] = ++sequenceCounter;
+        }
+    }
     friend bool operator<(const BlockStreamEntry& a, const BlockStreamEntry& b) {
         return a.txid != b.txid &&
             (a.fee_per_k < b.fee_per_k ||
@@ -124,6 +130,7 @@ const uint8_t BlockStreamEntry::STATE_DISCARD   = 2;
 const uint8_t BlockStreamEntry::STATE_DELTA     = 1 << 4;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
+std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
 
 class BlockStream
 {
