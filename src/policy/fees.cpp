@@ -112,6 +112,7 @@ struct BlockStreamEntry
     static const uint8_t STATE_CONFIRM;
     static const uint8_t STATE_DISCARD;
     static const uint8_t STATE_LOAD;
+    static const uint8_t STATE_UNKNOWN;
     static const uint8_t STATE_DELTA;
     static const uint8_t STATE_SESSION;
     void registerState(uint8_t state) const {
@@ -126,12 +127,12 @@ struct BlockStreamEntry
             fwrite(&timestamp, sizeof(int64_t), 1, mempoolData);
         }
         fwrite(&sequence, sizeof(uint32_t), 1, mempoolData);
-        if (state & STATE_ENTER) {
+        if (state & (STATE_ENTER | STATE_UNKNOWN)) {
             fwrite(&weight, sizeof(size_t), 1, mempoolData);
             fwrite(&fee_per_k, sizeof(double), 1, mempoolData);
         }
         mempoolLastTime = timestamp;
-        if (sequence % 100 == 0) fflush(mempoolData);
+        if (mempoolLoaded && (sequence % 100 == 0)) { printf("<> %u\n", sequence); fflush(mempoolData); }
     }
 };
 
@@ -140,6 +141,7 @@ const uint8_t BlockStreamEntry::STATE_CONFIRM   = 1 << 1;
 const uint8_t BlockStreamEntry::STATE_DISCARD   = 1 << 2;
 const uint8_t BlockStreamEntry::STATE_DELTA     = 1 << 3;
 const uint8_t BlockStreamEntry::STATE_LOAD      = 1 << 4;
+const uint8_t BlockStreamEntry::STATE_UNKNOWN   = 1 << 5;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
 std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
@@ -228,7 +230,7 @@ public:
                 size_t weight = e->GetTxWeight();
                 BlockStreamEntry f{txid, size, weight, fee_per_k};
                 block_fees += f.fee(); // we don't use e->GetFee() in case it distinguishes from fee() somehow
-                f.registerState(BlockStreamEntry::STATE_CONFIRM);
+                f.registerState(BlockStreamEntry::STATE_CONFIRM | (isknown * BlockStreamEntry::STATE_UNKNOWN));
                 auto it = std::find(entries.begin(), entries.end(), f);
                 if (it != entries.end()) {
                     hits++;
