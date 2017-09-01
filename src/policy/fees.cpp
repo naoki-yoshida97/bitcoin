@@ -132,7 +132,7 @@ struct BlockStreamEntry
             fwrite(&fee_per_k, sizeof(double), 1, mempoolData);
         }
         mempoolLastTime = timestamp;
-        if (mempoolLoaded && (sequence % 100 == 0)) { printf("<> %u\n", sequence); fflush(mempoolData); }
+        if (mempoolLoaded && (sequence % 100 == 0)) { printf("<> %u\n", sequenceCounter); fflush(mempoolData); }
     }
 };
 
