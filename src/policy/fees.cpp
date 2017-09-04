@@ -112,6 +112,7 @@ struct BlockStreamEntry
     static const uint8_t STATE_CONFIRM;
     static const uint8_t STATE_DISCARD;
     static const uint8_t STATE_LOAD;
+    static const uint8_t STATE_KNOWN;
     static const uint8_t STATE_UNKNOWN;
     static const uint8_t STATE_DELTA;
     static const uint8_t STATE_SESSION;
@@ -141,7 +142,8 @@ const uint8_t BlockStreamEntry::STATE_CONFIRM   = 1 << 1;
 const uint8_t BlockStreamEntry::STATE_DISCARD   = 1 << 2;
 const uint8_t BlockStreamEntry::STATE_DELTA     = 1 << 3;
 const uint8_t BlockStreamEntry::STATE_LOAD      = 1 << 4;
-const uint8_t BlockStreamEntry::STATE_UNKNOWN   = 1 << 5;
+const uint8_t BlockStreamEntry::STATE_KNOWN     = 1 << 5; // buggy unk
+const uint8_t BlockStreamEntry::STATE_UNKNOWN   = 1 << 6;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
 std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
