@@ -79,6 +79,7 @@ static inline void roll() {
 struct BlockStreamEntry
 {
     static std::map<uint256,uint32_t> hashSeqMap;
+    static std::map<uint32_t,bool> registeredEntryMap;
     static uint32_t sequenceCounter;
     uint32_t sequence;
     uint256 txid;
@@ -118,6 +119,10 @@ struct BlockStreamEntry
     static const uint8_t STATE_SESSION;
     void registerState(uint8_t state) const {
         int64_t timestamp = GetTime();
+        if (!(state & STATE_UNKNOWN) && !registeredEntryMap.count(sequence)) {
+            printf("- force unknown flag on unregistered tx %s (seq=%u)\n", txid.ToString().c_str(), sequence);
+            state |= STATE_UNKNOWN;
+        }
         if (timestamp - mempoolLastTime < 256) {
             uint8_t tsdelta = uint8_t(timestamp - mempoolLastTime);
             uint8_t flags = state | STATE_DELTA;
