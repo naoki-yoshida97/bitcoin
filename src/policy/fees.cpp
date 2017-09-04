@@ -231,7 +231,7 @@ public:
                 size_t weight = e->GetTxWeight();
                 BlockStreamEntry f{txid, size, weight, fee_per_k};
                 block_fees += f.fee(); // we don't use e->GetFee() in case it distinguishes from fee() somehow
-                f.registerState(BlockStreamEntry::STATE_CONFIRM | (isknown * BlockStreamEntry::STATE_UNKNOWN));
+                f.registerState(BlockStreamEntry::STATE_CONFIRM | ((!isknown) * BlockStreamEntry::STATE_UNKNOWN));
                 auto it = std::find(entries.begin(), entries.end(), f);
                 if (it != entries.end()) {
                     hits++;
