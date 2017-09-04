@@ -159,6 +159,7 @@ public:
     int64_t time_start;
     BlockStream()
     : current_min_fee_per_k(0.0)
+    , current_sum(0)
     , current_weight(0)
     , current_size(0)
     , min_fee_start(0)
