@@ -152,6 +152,7 @@ const uint8_t BlockStreamEntry::STATE_UNKNOWN   = 1 << 6;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
 std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
+std::map<uint32_t,bool> BlockStreamEntry::registeredEntryMap;
 
 class BlockStream
 {
