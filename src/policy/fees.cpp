@@ -160,6 +160,7 @@ class BlockStream
 public:
     static const uint32_t MAX_WEIGHT = 3999200;
     std::set<BlockStreamEntry> entries;
+    std::set<BlockStreamEntry> pool;
     double current_min_fee_per_k;
     int64_t current_sum;
     uint32_t current_weight;
@@ -202,10 +203,25 @@ public:
             auto it = entries.begin();
             const BlockStreamEntry& e = *it;
             // printf("[debug:blockstream] -%.2f sat/k tx\tweight: %u-%zu\tsize: %u-%zu\n", e.fee_per_k, current_weight, e.weight, current_size, e.size);
+            pool.insert(e);
             current_weight -= e.weight;
             current_size -= e.size;
             current_sum -= e.fee();
             entries.erase(it);
+        }
+        size_t pos = 0;
+        for (auto it = pool.rbegin(); current_weight < MAX_WEIGHT && it != pool.rend(); ++it) {
+            const BlockStreamEntry& e = *it;
+            if (e.weight + current_weight <= MAX_WEIGHT) {
+                // re-insert
+                entries.insert(e);
+                current_sum += e.fee();
+                current_weight += e.weight;
+                pool.erase(e);
+                it = pool.rbegin();
+                for (size_t i = 0; i < pos; i++) ++it;
+                if (it == pool.rend()) break;
+            } else pos++;
         }
         current_min_fee_per_k = entries.begin()->fee_per_k;
         min_fee_start = std::min(min_fee_start, current_min_fee_per_k);
@@ -219,6 +235,7 @@ public:
         bsentry.registerState(BlockStreamEntry::STATE_ENTER | BlockStreamEntry::STATE_LOAD);
     }
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
+        pool.clear();
         if (txe.size()) {
             int64_t my_fees = current_sum;
             // create set of held txids
@@ -266,9 +283,24 @@ public:
         }
 
         uint32_t consecutiveFailures = 0;
+        uint32_t discards = 0;
 
         {
             LOCK(mempool.cs);
+            // check each tx if it's still in mempool and mark it as discarded otherwise, removing it from entries
+            for (auto it = entries.begin(); it != entries.end(); ) {
+                const BlockStreamEntry& e = *it;
+                it++;
+                if (mempool.mapTx.count(e.txid) == 0) {
+                    // gone
+                    discards++;
+                    e.registerState(BlockStreamEntry::STATE_DISCARD);
+                    current_weight -= e.weight;
+                    current_size -= e.size;
+                    current_sum -= e.fee();
+                    entries.erase(e);
+                }
+            }
             for (auto entry : mempool.mapTx.get<ancestor_score>()) {
                 // First try to find a new transaction in mapTx to evaluate.
                 uint256 txid = entry.GetTx().GetHash();
@@ -283,22 +315,25 @@ public:
                 }
                 // Insert
                 consecutiveFailures = 0;
-                entries.insert(BlockStreamEntry{txid, size, weight, fee_per_k});
-                current_weight += weight;
-                current_size += size;
+                BlockStreamEntry e{txid, size, weight, fee_per_k};
+                entries.insert(e);
+                current_weight += e.weight;
+                current_size += e.size;
+                current_sum += e.fee();
                 while (current_weight > MAX_WEIGHT) {
                     auto it = entries.begin();
                     const BlockStreamEntry& e = *it;
                     current_weight -= e.weight;
                     current_size -= e.size;
+                    current_sum -= e.fee();
                     entries.erase(it);
                 }
                 min_fee_start = current_min_fee_per_k = entries.begin()->fee_per_k;
             }
         }
 
-        printf("[debug:blockstream] new block stream state: size=%u, weight=%u, min fee/k=%.2f\n",
-            current_size, current_weight, current_min_fee_per_k);
+        printf("[debug:blockstream] new block stream state: size=%u, weight=%u, min fee/k=%.2f [%u txs discarded from mempool]\n",
+            current_size, current_weight, current_min_fee_per_k, discards);
         time_start = GetTime();
     }
     double minFeeVelocity() {
