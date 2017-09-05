@@ -79,6 +79,7 @@ static inline void roll() {
 struct BlockStreamEntry
 {
     static std::map<uint256,uint32_t> hashSeqMap;
+    static std::set<uint256> hashSeqMapExpired;
     static std::map<uint32_t,bool> registeredEntryMap;
     static uint32_t sequenceCounter;
     uint32_t sequence;
@@ -140,6 +141,10 @@ struct BlockStreamEntry
         }
         mempoolLastTime = timestamp;
         if (mempoolLoaded && (sequence % 100 == 0)) { printf("<> %u\n", sequenceCounter); fflush(mempoolData); }
+        if (hashSeqMapExpired.end() == std::find(hashSeqMapExpired.begin(), hashSeqMapExpired.end(), txid) &&
+            (state & (STATE_CONFIRM | STATE_DISCARD))) {
+            hashSeqMapExpired.insert(txid);
+        }
     }
 };
 
@@ -153,6 +158,7 @@ const uint8_t BlockStreamEntry::STATE_UNKNOWN   = 1 << 6;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
 std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
+std::set<uint256> BlockStreamEntry::hashSeqMapExpired;
 std::map<uint32_t,bool> BlockStreamEntry::registeredEntryMap;
 
 class BlockStream
@@ -234,23 +240,54 @@ public:
         BlockStreamEntry bsentry{entry.GetTx().GetHash(), size, weight, fee_per_k};
         bsentry.registerState(BlockStreamEntry::STATE_ENTER | BlockStreamEntry::STATE_LOAD);
     }
-    void sync(uint32_t& consecutiveFailures, uint32_t& discards) {
-        consecutiveFailures = discards = 0;
+    void prune(uint32_t& discards, std::vector<const CTxMemPoolEntry*>* txe = nullptr) {
+        discards = 0;
         LOCK(mempool.cs);
-        // check each tx if it's still in mempool and mark it as discarded otherwise, removing it from entries
-        for (auto it = entries.begin(); it != entries.end(); ) {
-            const BlockStreamEntry& e = *it;
-            it++;
-            if (mempool.mapTx.count(e.txid) == 0) {
-                // gone
-                discards++;
-                e.registerState(BlockStreamEntry::STATE_DISCARD);
-                current_weight -= e.weight;
-                current_size -= e.size;
-                current_sum -= e.fee();
-                entries.erase(e);
+        std::set<uint256> txids;
+        if (txe) {
+            for (auto& tx : *txe) {
+                txids.insert(tx->GetTx().GetHash());
             }
         }
+        // check all hashSeqs and clean out transactions that are gone
+        // optionally skip if in txe as it is a pending block and will be
+        // committed (pruned) anyway
+        for (auto it : BlockStreamEntry::hashSeqMap) {
+            const uint256& txid = it.first;
+            if (txids.count(txid)) continue;
+            // if (txe && txe->end() != std::find(txe->begin(), txe->end(), e)) continue;
+            if (!BlockStreamEntry::hashSeqMapExpired.count(txid) &&
+                !mempool.mapTx.count(txid)) {
+                discards++;
+                BlockStreamEntry e{txid};
+                e.registerState(BlockStreamEntry::STATE_DISCARD);
+                auto it2 = std::find(entries.begin(), entries.end(), e);
+                if (it2 != entries.end()) {
+                    e = *it2;
+                    current_weight -= e.weight;
+                    current_size -= e.size;
+                    current_sum -= e.fee();
+                    entries.erase(e);
+                }
+            }
+        }
+        // // check each tx if it's still in mempool and mark it as discarded otherwise, removing it from entries
+        // for (auto it = entries.begin(); it != entries.end(); ) {
+        //     const BlockStreamEntry& e = *it;
+        //     it++;
+        //     if (mempool.mapTx.count(e.txid) == 0) {
+        //         // gone
+        //         discards++;
+        //         e.registerState(BlockStreamEntry::STATE_DISCARD);
+        //         current_weight -= e.weight;
+        //         current_size -= e.size;
+        //         current_sum -= e.fee();
+        //         entries.erase(e);
+        //     }
+        // }
+    }
+    void repopulate() {
+        uint32_t consecutiveFailures = 0;
         for (auto entry : mempool.mapTx.get<ancestor_score>()) {
             // First try to find a new transaction in mapTx to evaluate.
             uint256 txid = entry.GetTx().GetHash();
@@ -280,9 +317,18 @@ public:
             }
             min_fee_start = current_min_fee_per_k = entries.begin()->fee_per_k;
         }
+        // clear hashSeqMap
+        for (auto& it : BlockStreamEntry::hashSeqMapExpired) {
+            BlockStreamEntry::hashSeqMap.erase(it);
+        }
+        BlockStreamEntry::hashSeqMapExpired.clear();
     }
+
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
         pool.clear();
+        uint32_t discards;
+        prune(discards, &txe);
+
         if (txe.size()) {
             int64_t my_fees = current_sum;
             // create set of held txids
@@ -329,8 +375,7 @@ public:
             );
         }
 
-        uint32_t consecutiveFailures, discards;
-        sync(consecutiveFailures, discards);
+        repopulate();
 
         printf("[debug:blockstream] new block stream state: size=%u, weight=%u, min fee/k=%.2f [%u txs discarded from mempool]\n",
             current_size, current_weight, current_min_fee_per_k, discards);
