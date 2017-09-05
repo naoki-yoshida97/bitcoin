@@ -119,7 +119,7 @@ struct BlockStreamEntry
     static const uint8_t STATE_SESSION;
     void registerState(uint8_t state) const {
         int64_t timestamp = GetTime();
-        if (!(state & (STATE_ENTER | STATE_UNKNOWN)) && !registeredEntryMap.count(sequence)) {
+        if (!(state & (STATE_ENTER | STATE_UNKNOWN | STATE_DISCARD)) && !registeredEntryMap.count(sequence)) {
             printf("- force unknown flag on unregistered tx %s (seq=%u)\n", txid.ToString().c_str(), sequence);
             state |= STATE_UNKNOWN;
         }
