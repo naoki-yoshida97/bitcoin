@@ -234,6 +234,53 @@ public:
         BlockStreamEntry bsentry{entry.GetTx().GetHash(), size, weight, fee_per_k};
         bsentry.registerState(BlockStreamEntry::STATE_ENTER | BlockStreamEntry::STATE_LOAD);
     }
+    void sync(uint32_t& consecutiveFailures, uint32_t& discards) {
+        consecutiveFailures = discards = 0;
+        LOCK(mempool.cs);
+        // check each tx if it's still in mempool and mark it as discarded otherwise, removing it from entries
+        for (auto it = entries.begin(); it != entries.end(); ) {
+            const BlockStreamEntry& e = *it;
+            it++;
+            if (mempool.mapTx.count(e.txid) == 0) {
+                // gone
+                discards++;
+                e.registerState(BlockStreamEntry::STATE_DISCARD);
+                current_weight -= e.weight;
+                current_size -= e.size;
+                current_sum -= e.fee();
+                entries.erase(e);
+            }
+        }
+        for (auto entry : mempool.mapTx.get<ancestor_score>()) {
+            // First try to find a new transaction in mapTx to evaluate.
+            uint256 txid = entry.GetTx().GetHash();
+            if (entries.count(BlockStreamEntry{txid})) continue; // duplicate entry
+            size_t size = entry.GetTxSize();
+            double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
+            size_t weight = entry.GetTxWeight();
+            if (fee_per_k < current_min_fee_per_k &&
+                (current_weight + weight > MAX_WEIGHT)) {
+                if (consecutiveFailures++ > 1000) break;
+                continue;
+            }
+            // Insert
+            consecutiveFailures = 0;
+            BlockStreamEntry e{txid, size, weight, fee_per_k};
+            entries.insert(e);
+            current_weight += e.weight;
+            current_size += e.size;
+            current_sum += e.fee();
+            while (current_weight > MAX_WEIGHT) {
+                auto it = entries.begin();
+                const BlockStreamEntry& e = *it;
+                current_weight -= e.weight;
+                current_size -= e.size;
+                current_sum -= e.fee();
+                entries.erase(it);
+            }
+            min_fee_start = current_min_fee_per_k = entries.begin()->fee_per_k;
+        }
+    }
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
         pool.clear();
         if (txe.size()) {
@@ -282,55 +329,8 @@ public:
             );
         }
 
-        uint32_t consecutiveFailures = 0;
-        uint32_t discards = 0;
-
-        {
-            LOCK(mempool.cs);
-            // check each tx if it's still in mempool and mark it as discarded otherwise, removing it from entries
-            for (auto it = entries.begin(); it != entries.end(); ) {
-                const BlockStreamEntry& e = *it;
-                it++;
-                if (mempool.mapTx.count(e.txid) == 0) {
-                    // gone
-                    discards++;
-                    e.registerState(BlockStreamEntry::STATE_DISCARD);
-                    current_weight -= e.weight;
-                    current_size -= e.size;
-                    current_sum -= e.fee();
-                    entries.erase(e);
-                }
-            }
-            for (auto entry : mempool.mapTx.get<ancestor_score>()) {
-                // First try to find a new transaction in mapTx to evaluate.
-                uint256 txid = entry.GetTx().GetHash();
-                if (entries.count(BlockStreamEntry{txid})) continue; // duplicate entry
-                size_t size = entry.GetTxSize();
-                double fee_per_k = CFeeRate(entry.GetFee(), size).GetFeePerK();
-                size_t weight = entry.GetTxWeight();
-                if (fee_per_k < current_min_fee_per_k &&
-                    (current_weight + weight > MAX_WEIGHT)) {
-                    if (consecutiveFailures++ > 1000) break;
-                    continue;
-                }
-                // Insert
-                consecutiveFailures = 0;
-                BlockStreamEntry e{txid, size, weight, fee_per_k};
-                entries.insert(e);
-                current_weight += e.weight;
-                current_size += e.size;
-                current_sum += e.fee();
-                while (current_weight > MAX_WEIGHT) {
-                    auto it = entries.begin();
-                    const BlockStreamEntry& e = *it;
-                    current_weight -= e.weight;
-                    current_size -= e.size;
-                    current_sum -= e.fee();
-                    entries.erase(it);
-                }
-                min_fee_start = current_min_fee_per_k = entries.begin()->fee_per_k;
-            }
-        }
+        uint32_t consecutiveFailures, discards;
+        sync(consecutiveFailures, discards);
 
         printf("[debug:blockstream] new block stream state: size=%u, weight=%u, min fee/k=%.2f [%u txs discarded from mempool]\n",
             current_size, current_weight, current_min_fee_per_k, discards);
