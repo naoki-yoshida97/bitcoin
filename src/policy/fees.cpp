@@ -347,7 +347,7 @@ public:
         {
             LOCK(mempool.cs);
             BlockStreamEntry::registeredEntryMap.clear();
-            for (const auto& me : mempool.mapTx) {
+            for (auto me : mempool.mapTx.get<ancestor_score>()) {
                 BlockStreamEntry e{me};
                 e.registerState(BlockStreamEntry::STATE_ENTER);
             }
