@@ -99,6 +99,12 @@ struct BlockStreamEntry
             sequence = hashSeqMap[txid] = ++sequenceCounter;
         }
     }
+    BlockStreamEntry(const CTxMemPoolEntry& me)
+    : txid(me.GetTx().GetHash())
+    , size(me.GetTxSize())
+    , weight(me.GetTxWeight())
+    , fee_per_k(me.GetFee() * 1000 / me.GetTxSize())
+    {}
     double fee() const {
         return fee_per_k * (double)weight / 1000.0;
     }
@@ -118,6 +124,7 @@ struct BlockStreamEntry
     static const uint8_t STATE_UNKNOWN;
     static const uint8_t STATE_DELTA;
     static const uint8_t STATE_SESSION;
+    static const uint8_t STATE_RESET;
     void registerState(uint8_t state) const {
         int64_t timestamp = GetTime();
         if (!(state & (STATE_ENTER | STATE_UNKNOWN | STATE_DISCARD)) && !registeredEntryMap.count(sequence)) {
@@ -156,6 +163,7 @@ const uint8_t BlockStreamEntry::STATE_LOAD      = 1 << 4;
 const uint8_t BlockStreamEntry::STATE_KNOWN     = 1 << 5; // buggy unk
 const uint8_t BlockStreamEntry::STATE_UNKNOWN   = 1 << 6;
 const uint8_t BlockStreamEntry::STATE_SESSION   = 0xff;
+const uint8_t BlockStreamEntry::STATE_RESET     = 0xfe;
 uint32_t BlockStreamEntry::sequenceCounter = 0;
 std::map<uint256,uint32_t> BlockStreamEntry::hashSeqMap;
 std::set<uint256> BlockStreamEntry::hashSeqMapExpired;
@@ -322,6 +330,17 @@ public:
             BlockStreamEntry::hashSeqMap.erase(it);
         }
         BlockStreamEntry::hashSeqMapExpired.clear();
+        // above is actually useless; we simply regenerate the state at each
+        // block, as it seems the mempool is not in sync afterwards
+        fwrite(&BlockStreamEntry::STATE_RESET, 1, 1, mempoolData);
+        {
+            LOCK(mempool.cs);
+            BlockStreamEntry::registeredEntryMap.clear();
+            for (const auto& me : mempool.mapTx) {
+                BlockStreamEntry e{me};
+                e.registerState(BlockStreamEntry::STATE_ENTER);
+            }
+        }
     }
 
     void processBlock(std::vector<const CTxMemPoolEntry*>& txe) {
