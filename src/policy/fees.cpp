@@ -130,6 +130,8 @@ struct BlockStreamEntry
         if (!(state & (STATE_ENTER | STATE_UNKNOWN | STATE_DISCARD)) && !registeredEntryMap.count(sequence)) {
             printf("- force unknown flag on unregistered tx %s (seq=%u)\n", txid.ToString().c_str(), sequence);
             state |= STATE_UNKNOWN;
+        } else {
+            printf("- %c %u\n", desch(state), sequence);
         }
         registeredEntryMap[sequence] = true;
         if (timestamp - mempoolLastTime < 256) {
