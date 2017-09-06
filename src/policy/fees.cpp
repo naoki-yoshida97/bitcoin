@@ -100,7 +100,7 @@ struct BlockStreamEntry
         }
     }
     BlockStreamEntry(const CTxMemPoolEntry& me)
-    : BlockStreamEntry(me.GetTx().GetHash(), size(me.GetTxSize()), weight(me.GetTxWeight()), fee_per_k(me.GetFee() * 1000 / me.GetTxSize()))
+    : BlockStreamEntry(me.GetTx().GetHash(), me.GetTxSize(), me.GetTxWeight(), me.GetFee() * 1000 / me.GetTxSize())
     {}
     double fee() const {
         return fee_per_k * (double)weight / 1000.0;
