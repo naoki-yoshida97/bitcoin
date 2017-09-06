@@ -1205,9 +1205,9 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     }
     txSinceTipChange++;
     // every 100 txs we create an estimation
-    // if (startEstimating && 0 == (trackedTxs % 100)) {
-    //     estimationAttempts.push_back(EstimationAttempt().calculate(*this));
-    // }
+    if (startEstimating && 0 == (trackedTxs % 100)) {
+        estimationAttempts.push_back(EstimationAttempt().calculate(*this));
+    }
 }
 
 bool CBlockPolicyEstimator::processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry)
@@ -1548,18 +1548,18 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     if (optimizeViaMempool) {
         int64_t realTimePassed = GetTime() - lastChainTipChange;
         // int64_t timePassed = std::min<int64_t>(720, realTimePassed);
-        int64_t estTimeLeft = std::max<int64_t>(60, 600 - realTimePassed);
+        // int64_t estTimeLeft = std::max<int64_t>(60, 600 - realTimePassed);
         // double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         // double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
 
-        double mempoolFeeRatePercentile =
-            std::max(
-                0.15,
-                0.15
-                + 0.10 * conservative
-                // + 0.02 * (10.0 - timeSlots)
-                - confTarget * 0.005
-            );
+        double mempoolFeeRatePercentile = 0.10 + (!!conservative * 0.05);
+            // std::max(
+            //     0.15,
+            //     0.15
+            //     + 0.10 * conservative
+            //     // + 0.02 * (10.0 - timeSlots)
+            //     - confTarget * 0.005
+            // );
         if (feeCalc) {
             feeCalc->tipChangeDelta = realTimePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
@@ -1567,19 +1567,19 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         }
 
         mempoolFeeRate = estimateMempoolFee(mempoolFeeRatePercentile);
-        if (mempoolFeeRate.GetFeePerK() > 0) {
-            if (confTarget == 1 || confTarget == 10) printf(
-                "percentile = 0.15 + 0.10 * %d - %d * 0.005 == %.2f"
-                ": %lld + %.2f * %lld{%.2f} = %.2f\n",
-                conservative, confTarget, mempoolFeeRatePercentile,
-                mempoolFeeRate.GetFeePerK(),
-                g_blockstream.minFeeVelocity(),
-                estTimeLeft,
-                g_blockstream.minFeeVelocity() * estTimeLeft,
-                mempoolFeeRate.GetFeePerK() + g_blockstream.minFeeVelocity() * estTimeLeft
-            );
-            mempoolFeeRate = CFeeRate(mempoolFeeRate.GetFeePerK() + g_blockstream.minFeeVelocity() * estTimeLeft);
-        }
+        // if (mempoolFeeRate.GetFeePerK() > 0) {
+        //     if (confTarget == 1 || confTarget == 10) printf(
+        //         "percentile = 0.15 + 0.10 * %d - %d * 0.005 == %.2f"
+        //         ": %lld + %.2f * %lld{%.2f} = %.2f\n",
+        //         conservative, confTarget, mempoolFeeRatePercentile,
+        //         mempoolFeeRate.GetFeePerK(),
+        //         g_blockstream.minFeeVelocity(),
+        //         estTimeLeft,
+        //         g_blockstream.minFeeVelocity() * estTimeLeft,
+        //         mempoolFeeRate.GetFeePerK() + g_blockstream.minFeeVelocity() * estTimeLeft
+        //     );
+        //     mempoolFeeRate = CFeeRate(mempoolFeeRate.GetFeePerK() + g_blockstream.minFeeVelocity() * estTimeLeft);
+        // }
     }
 
     // Return failure if trying to analyze a target we're not tracking
