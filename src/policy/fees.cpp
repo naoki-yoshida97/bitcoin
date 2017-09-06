@@ -125,6 +125,15 @@ struct BlockStreamEntry
     static const uint8_t STATE_DELTA;
     static const uint8_t STATE_SESSION;
     static const uint8_t STATE_RESET;
+    static char desch(const uint8_t state) {
+        return (state & STATE_ENTER)
+            ? '+'
+            : (state & STATE_CONFIRM)
+            ? '-'
+            : (state & STATE_DISCARD)
+            ? 'X'
+            : '?';
+    }
     void registerState(uint8_t state) const {
         int64_t timestamp = GetTime();
         if (!(state & (STATE_ENTER | STATE_UNKNOWN | STATE_DISCARD)) && !registeredEntryMap.count(sequence)) {
