@@ -350,6 +350,7 @@ public:
             LOCK(mempool.cs);
             BlockStreamEntry::registeredEntryMap.clear();
             for (auto me : mempool.mapTx.get<ancestor_score>()) {
+                printf("me = %s\n", me.GetTx().GetHash().ToString().c_str());
                 BlockStreamEntry e{me};
                 e.registerState(BlockStreamEntry::STATE_ENTER);
             }
