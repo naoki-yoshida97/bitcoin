@@ -1560,6 +1560,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
             //     // + 0.02 * (10.0 - timeSlots)
             //     - confTarget * 0.005
             // );
+        printf("mempoolFeeRatePercentile = %f\n", mempoolFeeRatePercentile);
         if (feeCalc) {
             feeCalc->tipChangeDelta = realTimePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
