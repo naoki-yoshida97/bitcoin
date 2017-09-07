@@ -431,7 +431,7 @@ struct EstimationSummary
     uint32_t timeUndershots[100]; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
     uint32_t percUndershots[200]; // percentile (for mempool est) of undershots, if available; entry 0 is 0.00 and entry 199 is 1.99 or above
     uint32_t blockCountUndershots[10]; // block target of undershots, if available; entry 0 is "next block", entry 9 is "in 10 blocks"
-    uint32_t blockCount[10][10]; // resulting -> desired count
+    uint32_t blockCount[31][10]; // resulting -> desired count
     std::vector<OptimumEntry> optimums;
     EstimationSummary(bool conservativeIn, bool mempoolOptimIn)
     : startTime(GetTimeMicros()),
@@ -449,6 +449,8 @@ struct EstimationSummary
     {
         for (int i = 0; i < 10; i++) {
             timeUndershots[i] = percUndershots[i] = blockCountUndershots[i] = 0;
+        }
+        for (int i = 0; i < 31; i++) {
             for (int j = 0; j < 10; j++) {
                 blockCount[i][j] = 0;
             }
@@ -465,8 +467,8 @@ struct EstimationSummary
         estimations++;
         double overpaid = fee - thresh;
         int overblocked = resulting_blocks - desired_blocks;
-        if (overpaid > -1) {
-            // this actually went into a block
+        if (overpaid > -1 || resulting_blocks == 31) {
+            // this actually went into a block or it was abandoned
             blockCount[resulting_blocks-1][desired_blocks-1]++;
         }
         if (overpaid > 1) {
@@ -541,13 +543,13 @@ struct EstimationSummary
             printf(" }\n");
         }
         printf("          1        2        3        4        5        6        7        8        9       10 (desired block)\n");
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 31; i++) {
             bool skip = true;
             for (int j = 0; skip && j < 10; j++) {
                 skip = !(blockCount[i][j]);
             }
             if (skip) continue;
-            printf("%2d ", i+1);
+            if (i == 30) printf(" ∞ "); else printf("%2d ", i+1);
             for (int j = 0; j < 10; j++) {
                 printf("%8d ", blockCount[i][j]);
             }
@@ -630,7 +632,7 @@ public:
                 } else if (lowest10thresh < conservativeRateVector[i]) {
                     estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                     cinblock[i] = true;
-                } else if (i + 1 == progressedBlocks) {
+                } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
                     estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                 }
@@ -642,7 +644,7 @@ public:
                 } else if (lowest10thresh < conservativeRateVectorMPO[i]) {
                     estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
                     cminblock[i] = true;
-                } else if (i + 1 == progressedBlocks) {
+                } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
                     estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &cmfc[i]);
                 }
@@ -654,7 +656,7 @@ public:
                 } else if (lowest10thresh < nonconservativeRateVector[i]) {
                     estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                     ncinblock[i] = true;
-                } else if (i + 1 == progressedBlocks) {
+                } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
                     estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                 }
@@ -666,7 +668,7 @@ public:
                 } else if (lowest10thresh < nonconservativeRateVectorMPO[i]) {
                     estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
                     ncminblock[i] = true;
-                } else if (i + 1 == progressedBlocks) {
+                } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
                     estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &ncmfc[i]);
                 }
