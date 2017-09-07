@@ -542,6 +542,11 @@ struct EstimationSummary
         }
         printf("          1        2        3        4        5        6        7        8        9       10 (desired block)\n");
         for (int i = 0; i < 10; i++) {
+            bool skip = true;
+            for (int j = 0; skip && j < 10; j++) {
+                skip = !(blockCount[i][j]);
+            }
+            if (skip) continue;
             printf("%2d ", i+1);
             for (int j = 0; j < 10; j++) {
                 printf("%8d ", blockCount[i][j]);
