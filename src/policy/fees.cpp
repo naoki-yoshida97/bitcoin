@@ -1541,6 +1541,11 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         feeCalc->returnedTarget = confTarget;
     }
 
+    // Return failure if trying to analyze a target we're not tracking
+    if (confTarget <= 0 || (unsigned int)confTarget > longStats->GetMaxConfirms()) {
+        return CFeeRate(0);  // error condition
+    }
+
     double median = -1;
     EstimationResult tempResult;
 
@@ -1560,7 +1565,6 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
             //     // + 0.02 * (10.0 - timeSlots)
             //     - confTarget * 0.005
             // );
-        printf("mempoolFeeRatePercentile = %f\n", mempoolFeeRatePercentile);
         if (feeCalc) {
             feeCalc->tipChangeDelta = realTimePassed;
             feeCalc->mempoolFeeRatePercentile = mempoolFeeRatePercentile;
@@ -1583,11 +1587,6 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         // }
     }
 
-    // Return failure if trying to analyze a target we're not tracking
-    if (confTarget <= 0 || (unsigned int)confTarget > longStats->GetMaxConfirms()) {
-        return mempoolFeeRate; // CFeeRate(0);  // error condition
-    }
-
     // It's not possible to get reasonable estimates for confTarget of 1
     if (confTarget == 1) confTarget = 2;
 
@@ -1597,7 +1596,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
     }
     if (feeCalc) feeCalc->returnedTarget = confTarget;
 
-    if (confTarget <= 1) return mempoolFeeRate; //CFeeRate(0); // error condition
+    if (confTarget <= 1) return CFeeRate(0); // error condition
 
     assert(confTarget > 0); //estimateCombinedFee and estimateConservativeFee take unsigned ints
     /** true is passed to estimateCombined fee for target/2 and target so
