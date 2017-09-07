@@ -431,6 +431,7 @@ struct EstimationSummary
     uint32_t timeUndershots[100]; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
     uint32_t percUndershots[200]; // percentile (for mempool est) of undershots, if available; entry 0 is 0.00 and entry 199 is 1.99 or above
     uint32_t blockCountUndershots[10]; // block target of undershots, if available; entry 0 is "next block", entry 9 is "in 10 blocks"
+    uint32_t blockCount[10][10]; // resulting -> desired count
     std::vector<OptimumEntry> optimums;
     EstimationSummary(bool conservativeIn, bool mempoolOptimIn)
     : startTime(GetTimeMicros()),
@@ -448,6 +449,9 @@ struct EstimationSummary
     {
         for (int i = 0; i < 10; i++) {
             timeUndershots[i] = percUndershots[i] = blockCountUndershots[i] = 0;
+            for (int j = 0; j < 10; j++) {
+                blockCount[i][j] = 0;
+            }
         }
         for (int i = 10; i < 100; i++) {
             timeUndershots[i] = percUndershots[i] = 0;
@@ -461,6 +465,10 @@ struct EstimationSummary
         estimations++;
         double overpaid = fee - thresh;
         int overblocked = resulting_blocks - desired_blocks;
+        if (overpaid > -1) {
+            // this actually went into a block
+            blockCount[resulting_blocks-1][desired_blocks-1]++;
+        }
         if (overpaid > 1) {
             // we did indeed overpay
             overshoots++;
@@ -531,6 +539,14 @@ struct EstimationSummary
                 if (percUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)percUndershots[i] / undershoots);
             }
             printf(" }\n");
+        }
+        printf("   1        2        3        4        5        6        7        8        9       10 (desired block)\n");
+        for (int i = 0; i < 10; i++) {
+            printf("%2d ", i+1);
+            for (int j = 0; j < 10; j++) {
+                printf("%8d ", blockCount[i][j]);
+            }
+            printf("\n");
         }
     }
 };
