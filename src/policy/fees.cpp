@@ -1552,7 +1552,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         // double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         // double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
 
-        double mempoolFeeRatePercentile = 0.10 + (!!conservative * 0.05);
+        double mempoolFeeRatePercentile = (0.10 + (realTimePassed < 170) * 0.03 + !!conservative * 0.05) * (1.0 - confTarget * 0.05);
             // std::max(
             //     0.15,
             //     0.15
