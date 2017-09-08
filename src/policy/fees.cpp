@@ -614,7 +614,7 @@ public:
         estimationLastTime = t;
     }
 
-    void addEstimation(uint8_t type, uint8_t blocks_target, double val) {
+    void addEstimation(uint8_t type, uint8_t blocks_target, double val, double& min, double& max) {
         printf("adding %u est with targ=%u; val=%f\n", type, blocks_target, val);
         if (val < 0.1) return; // failed; skip
         std::vector<double>* vs[] = {&conservativeRateVector, &nonconservativeRateVector, &conservativeRateVectorMPO, &nonconservativeRateVectorMPO};
@@ -623,6 +623,8 @@ public:
         fwrite(&type, 1, 1, estimationData);
         fwrite(&val, sizeof(double), 1, estimationData);
         fwrite(&blocks_target, 1, 1, estimationData);
+        if (min > val) min = val;
+        if (max < val) max = val;
     }
 
     void addResult(uint8_t type, double lowest10thresh, double val, uint8_t blocks_target, uint8_t after_blocks) {
@@ -642,20 +644,20 @@ public:
         double min[4] = {1e99, 1e99, 1e99, 1e99};
         double max[4] = {0};
         for (int i = 0; i < 10; i++) {
-            addEstimation(TYPE_C, i+1, bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK());
-            addEstimation(TYPE_NC, i+1, bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK());
-            addEstimation(TYPE_CM, i+1, bpe.estimateSmartFee(i+1, &cmfc[i], true, true).GetFeePerK());
-            addEstimation(TYPE_NCM, i+1, bpe.estimateSmartFee(i+1, &ncmfc[i], false, true).GetFeePerK());
-            if (conservativeRateVector.back() > 1 && min[0] > conservativeRateVector.back()) min[0] = conservativeRateVector.back();
-            if (nonconservativeRateVector.back() > 1 && min[1] > nonconservativeRateVector.back()) min[1] = nonconservativeRateVector.back();
-            if (conservativeRateVectorMPO.back() > 1 && min[2] > conservativeRateVectorMPO.back()) min[2] = conservativeRateVectorMPO.back();
-            if (nonconservativeRateVectorMPO.back() > 1 && min[3] > nonconservativeRateVectorMPO.back()) min[3] = nonconservativeRateVectorMPO.back();
-            if (max[0] < conservativeRateVector.back()) max[0] = conservativeRateVector.back();
-            if (max[1] < nonconservativeRateVector.back()) max[1] = nonconservativeRateVector.back();
-            if (max[2] < conservativeRateVectorMPO.back()) max[2] = conservativeRateVectorMPO.back();
-            if (max[3] < nonconservativeRateVectorMPO.back()) max[3] = nonconservativeRateVectorMPO.back();
+            addEstimation(TYPE_C, i+1, bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK(), min[0], max[0]);
+            addEstimation(TYPE_NC, i+1, bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK(), min[1], max[1]);
+            addEstimation(TYPE_CM, i+1, bpe.estimateSmartFee(i+1, &cmfc[i], true, true).GetFeePerK(), min[2], max[2]);
+            addEstimation(TYPE_NCM, i+1, bpe.estimateSmartFee(i+1, &ncmfc[i], false, true).GetFeePerK(), min[3], max[3]);
+            // if (conservativeRateVector.back() > 1 && min[0] > conservativeRateVector.back()) min[0] = conservativeRateVector.back();
+            // if (nonconservativeRateVector.back() > 1 && min[1] > nonconservativeRateVector.back()) min[1] = nonconservativeRateVector.back();
+            // if (conservativeRateVectorMPO.back() > 1 && min[2] > conservativeRateVectorMPO.back()) min[2] = conservativeRateVectorMPO.back();
+            // if (nonconservativeRateVectorMPO.back() > 1 && min[3] > nonconservativeRateVectorMPO.back()) min[3] = nonconservativeRateVectorMPO.back();
+            // if (max[0] < conservativeRateVector.back()) max[0] = conservativeRateVector.back();
+            // if (max[1] < nonconservativeRateVector.back()) max[1] = nonconservativeRateVector.back();
+            // if (max[2] < conservativeRateVectorMPO.back()) max[2] = conservativeRateVectorMPO.back();
+            // if (max[3] < nonconservativeRateVectorMPO.back()) max[3] = nonconservativeRateVectorMPO.back();
         }
-        printf("EstimationAttempt: mins = %.2f, %.2f, %.2f, %.2f | maxs = %.2f, %.2f, %.2f, %.2f\n", min[0], min[1], min[2], min[3], max[0], max[1], max[2], max[3]);
+        printf("EstimationAttempt (%zu, %zu, %zu, %zu): mins = %.2f, %.2f, %.2f, %.2f | maxs = %.2f, %.2f, %.2f, %.2f\n", conservativeRateVector.size(), nonconservativeRateVector.size(), conservativeRateVectorMPO.size(), nonconservativeRateVectorMPO.size(), min[0], min[1], min[2], min[3], max[0], max[1], max[2], max[3]);
         return *this;
     }
 
