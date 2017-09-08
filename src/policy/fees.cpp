@@ -615,6 +615,7 @@ public:
     }
 
     void addEstimation(uint8_t type, uint8_t blocks_target, double val) {
+        printf("adding %u est with targ=%u; val=%f\n", type, blocks_target, val);
         if (val < 0.1) return; // failed; skip
         std::vector<double>* vs[] = {&conservativeRateVector, &nonconservativeRateVector, &conservativeRateVectorMPO, &nonconservativeRateVectorMPO};
         vs[type]->push_back(val);
