@@ -628,7 +628,7 @@ public:
     }
 
     void addResult(uint8_t type, double lowest10thresh, double val, uint8_t blocks_target, uint8_t after_blocks) {
-        std::vector<EstimationSummary*>* vs[] = {&estsumC, &estsumNC, &estsumCM, &estsumNCM};
+        EstimationSummary* vs[] = {&estsumC, &estsumNC, &estsumCM, &estsumNCM};
         vs[type]->log(val, lowest10thresh, blocks_target, progressedBlocks);
         writeFlagWithTime(after_blocks < 31 ? FLAG_CONFIRM : FLAG_DISCARD);
         fwrite(&type, 1, 1, estimationData);
