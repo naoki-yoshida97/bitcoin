@@ -18,7 +18,9 @@
 static constexpr double INF_FEERATE = 1e99;
 static int64_t txSinceTipChange = 0;
 static FILE* mempoolData = nullptr;
+static FILE* estimationData = nullptr;
 static int64_t mempoolLastTime = 0;
+static int64_t estimationLastTime = 0;
 
 std::string StringForFeeEstimateHorizon(FeeEstimateHorizon horizon) {
     static const std::map<FeeEstimateHorizon, std::string> horizon_strings = {
@@ -580,8 +582,58 @@ public:
     std::vector<double> nonconservativeRateVector;
     std::vector<double> conservativeRateVectorMPO;
     std::vector<double> nonconservativeRateVectorMPO;
-    EstimationAttempt& calculate(CBlockPolicyEstimator& bpe)
-    {
+
+    EstimationAttempt() {
+        if (estimationData == nullptr) {
+            fs::path defaultdir = fs::path(getenv("HOME")) / "estimations.dat";
+            estimationData = fsbridge::fopen(defaultdir, "a+");
+            fwrite(&BlockStreamEntry::STATE_SESSION, 1, 1, estimationData);
+        }
+    }
+
+    #define TYPE_C   0
+    #define TYPE_NC  1
+    #define TYPE_CM  2
+    #define TYPE_NCM 3
+    static uint8_t FLAG_NEW;
+    static uint8_t FLAG_CONFIRM;
+    static uint8_t FLAG_DISCARD;
+    static uint8_t FLAG_DELTA;
+
+    static inline void writeFlagWithTime(uint8_t flag) {
+        int64_t t = GetTime();
+        if (t - estimationLastTime < 256) {
+            flag |= FLAG_DELTA;
+            uint8_t tdelta = uint8_t(t - estimationLastTime);
+            fwrite(&flag, 1, 1, estimationData);
+            fwrite(&tdelta, 1, 1, estimationData);
+        } else {
+            fwrite(&flag, 1, 1, estimationData);
+            fwrite(&t, sizeof(int64_t), 1, estimationData);
+        }
+        estimationLastTime = t;
+    }
+
+    void addEstimation(uint8_t type, uint8_t blocks_target, double val) {
+        if (val < 0.1) return; // failed; skip
+        std::vector<double>* vs[] = {&conservativeRateVector, &nonconservativeRateVector, &conservativeRateVectorMPO, &nonconservativeRateVectorMPO};
+        vs[type]->push_back(val);
+        writeFlagWithTime(FLAG_NEW);
+        fwrite(&type, 1, 1, estimationData);
+        fwrite(&val, sizeof(double), 1, estimationData);
+        fwrite(&blocks_target, 1, 1, estimationData);
+    }
+
+    void addResult(uint8_t type, double lowest10thresh, double val, uint8_t blocks_target, uint8_t after_blocks) {
+        estsumC.log(val, lowest10thresh, blocks_target, progressedBlocks);
+        writeFlagWithTime(after_blocks < 31 ? FLAG_CONFIRM : FLAG_DISCARD);
+        fwrite(&type, 1, 1, estimationData);
+        fwrite(&val, sizeof(double), 1, estimationData);
+        fwrite(&blocks_target, 1, 1, estimationData);
+        if (after_blocks < 31) fwrite(&after_blocks, 1, 1, estimationData);
+    }
+
+    EstimationAttempt& calculate(CBlockPolicyEstimator& bpe) {
         // get general mempool stats
         bpe.estimateMempoolFee(0.15, rates);
         // we attempt estimations up to 10 blocks
@@ -589,10 +641,10 @@ public:
         double min[4] = {1e99, 1e99, 1e99, 1e99};
         double max[4] = {0};
         for (int i = 0; i < 10; i++) {
-            conservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK());
-            nonconservativeRateVector.push_back(bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK());
-            conservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, &cmfc[i], true, true).GetFeePerK());
-            nonconservativeRateVectorMPO.push_back(bpe.estimateSmartFee(i+1, &ncmfc[i], false, true).GetFeePerK());
+            addEstimation(TYPE_C, i+1, bpe.estimateSmartFee(i+1, nullptr, true).GetFeePerK());
+            addEstimation(TYPE_NC, i+1, bpe.estimateSmartFee(i+1, nullptr, false).GetFeePerK());
+            addEstimation(TYPE_CM, i+1, bpe.estimateSmartFee(i+1, &cmfc[i], true, true).GetFeePerK());
+            addEstimation(TYPE_NCM, i+1, bpe.estimateSmartFee(i+1, &ncmfc[i], false, true).GetFeePerK());
             if (conservativeRateVector.back() > 1 && min[0] > conservativeRateVector.back()) min[0] = conservativeRateVector.back();
             if (nonconservativeRateVector.back() > 1 && min[1] > nonconservativeRateVector.back()) min[1] = nonconservativeRateVector.back();
             if (conservativeRateVectorMPO.back() > 1 && min[2] > conservativeRateVectorMPO.back()) min[2] = conservativeRateVectorMPO.back();
@@ -605,8 +657,8 @@ public:
         printf("EstimationAttempt: mins = %.2f, %.2f, %.2f, %.2f | maxs = %.2f, %.2f, %.2f, %.2f\n", min[0], min[1], min[2], min[3], max[0], max[1], max[2], max[3]);
         return *this;
     }
-    bool apply(const std::vector<double>& lastBlockFeesPerK)
-    {
+
+    bool apply(const std::vector<double>& lastBlockFeesPerK) {
         if (lastBlockFeesPerK.size() < 100) return false; // don't look at empty blocks
         // check all not yet in blocks
         int nyib = 0;
@@ -630,11 +682,14 @@ public:
                     // estimation failed; abort
                     cinblock[i] = true;
                 } else if (lowest10thresh < conservativeRateVector[i]) {
-                    estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                    addResult(TYPE_C, lowest10thresh, conservativeRateVector[i], i+1, progressedBlocks);
                     cinblock[i] = true;
                 } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
-                    estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                    if (progressedBlocks == 31) 
+                        addResult(TYPE_C, lowest10thresh, conservativeRateVector[i], i+1, progressedBlocks);
+                    else
+                        estsumC.log(conservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                 }
             }
             if (!cminblock[i]) {
@@ -642,11 +697,14 @@ public:
                     // estimation failed; abort
                     cminblock[i] = true;
                 } else if (lowest10thresh < conservativeRateVectorMPO[i]) {
-                    estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                    addResult(TYPE_CM, lowest10thresh, conservativeRateVectorMPO[i], i+1, progressedBlocks);
                     cminblock[i] = true;
                 } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
-                    estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &cmfc[i]);
+                    if (progressedBlocks == 31) 
+                        addResult(TYPE_CM, lowest10thresh, conservativeRateVectorMPO[i], i+1, progressedBlocks);
+                    else
+                        estsumCM.log(conservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &cmfc[i]);
                 }
             }
             if (!ncinblock[i]) {
@@ -654,11 +712,14 @@ public:
                     // estimation failed; abort
                     ncinblock[i] = true;
                 } else if (lowest10thresh < nonconservativeRateVector[i]) {
-                    estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                    addResult(TYPE_NC, lowest10thresh, nonconservativeRateVector[i], i+1, progressedBlocks);
                     ncinblock[i] = true;
                 } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
-                    estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
+                    if (progressedBlocks == 31)
+                        addResult(TYPE_NC, lowest10thresh, nonconservativeRateVector[i], i+1, progressedBlocks);
+                    else
+                        estsumNC.log(nonconservativeRateVector[i], lowest10thresh, i+1, progressedBlocks);
                 }
             }
             if (!ncminblock[i]) {
@@ -666,11 +727,14 @@ public:
                     // estimation failed; abort
                     ncminblock[i] = true;
                 } else if (lowest10thresh < nonconservativeRateVectorMPO[i]) {
-                    estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks);
+                    addResult(TYPE_NCM, lowest10thresh, nonconservativeRateVectorMPO[i], i+1, progressedBlocks);
                     ncminblock[i] = true;
                 } else if (i + 1 == progressedBlocks || progressedBlocks == 31) {
                     // record undershooting; wait for confirm
-                    estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &ncmfc[i]);
+                    if (progressedBlocks == 31)
+                        addResult(TYPE_NCM, lowest10thresh, nonconservativeRateVectorMPO[i], i+1, progressedBlocks);
+                    else
+                        estsumNCM.log(nonconservativeRateVectorMPO[i], lowest10thresh, i+1, progressedBlocks, &ncmfc[i]);
                 }
             }
             nyib += !(cinblock[i] && ncinblock[i] && cminblock[i] && ncminblock[i]);
@@ -679,6 +743,11 @@ public:
         return !nyib || progressedBlocks > 30; // give up after 30 blocks
     }
 };
+
+uint8_t EstimationAttempt::FLAG_NEW = 1 << 2;
+uint8_t EstimationAttempt::FLAG_CONFIRM = 1 << 3;
+uint8_t EstimationAttempt::FLAG_DISCARD = 1 << 4;
+uint8_t EstimationAttempt::FLAG_DELTA = 1 << 5;
 
 /**
  * We will instantiate an instance of this class to track transactions that were
@@ -1230,6 +1299,7 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     // every 100 txs we create an estimation
     if (startEstimating && 0 == (trackedTxs % 100)) {
         estimationAttempts.push_back(EstimationAttempt().calculate(*this));
+        fflush(estimationData);
     }
 }
 
@@ -1323,6 +1393,7 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     estsumCM.printstats();
     estsumNCM.printstats();
     g_blockstream.processBlock(entries);
+    fflush(estimationData);
 
     if (firstRecordedHeight == 0 && countedTxs > 0) {
         firstRecordedHeight = nBestSeenHeight;
@@ -1580,7 +1651,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
         // double timeSlots = (double)timePassed / 72; // 0..10 (where 10 = 12 mins)
         // double txVelocity = (double)txSinceTipChange / (realTimePassed + !realTimePassed);
 
-        double mempoolFeeRatePercentile = (0.10 + (realTimePassed < 170) * 0.03 + !!conservative * 0.05) * (1.0 - confTarget * 0.05);
+        double mempoolFeeRatePercentile = std::max(0.10, (0.10 + (realTimePassed < 170) * 0.03 + !!conservative * 0.05) * (1.0 - confTarget * 0.05));
             // std::max(
             //     0.15,
             //     0.15
