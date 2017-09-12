@@ -1748,7 +1748,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, FeeCalculation 
 
     if (median < 0) return CFeeRate(0); // error condition
 
-    return optimizeViaMempool && CFeeRate(median) > mempoolFeeRate ? mempoolFeeRate : CFeeRate(median);
+    return optimizeViaMempool && mempoolFeeRate > CFeeRate(0) && CFeeRate(median) > mempoolFeeRate ? mempoolFeeRate : CFeeRate(median);
 }
 
 
