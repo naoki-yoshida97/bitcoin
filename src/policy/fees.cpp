@@ -429,6 +429,7 @@ struct EstimationSummary
     uint64_t undersum;
     uint64_t overblocks;        // # of times we estimated X blocks and X > actual
     uint64_t underblocks;       // # of times we estimated X blocks and X < actual
+    uint64_t failures;          // # of times a tx was abandoned due to hitting max cap
     uint64_t overblocksum;      // sum(X - actual) for all overblocks encounters
     uint64_t underblocksum;     // sum(actual - X) for all underblocks encounters
     uint32_t timeUndershots[100]; // time distribution of undershots, if available; entry 0 is 'right after new block' and 99 is 'at or beyond 12 min mark'
@@ -447,6 +448,7 @@ struct EstimationSummary
       undersum(0),
       overblocks(0),
       underblocks(0),
+      failures(0),
       overblocksum(0),
       underblocksum(0)
     {
@@ -470,10 +472,13 @@ struct EstimationSummary
         estimations++;
         double overpaid = fee - thresh;
         int overblocked = resulting_blocks - desired_blocks;
-        if (overpaid > -1 || resulting_blocks == 31) {
+        bool failure = resulting_blocks == 31;
+        if (overpaid > -1 || failure) {
             // this actually went into a block or it was abandoned
             blockCount[resulting_blocks-1][desired_blocks-1]++;
+            failures += failure;
         }
+        if (failure) return; // don't log anything else for failed txs
         if (overpaid > 1) {
             // we did indeed overpay
             overshoots++;
@@ -515,7 +520,7 @@ struct EstimationSummary
     void printstats()
     {
         printf(
-            "[bench::fees (%s|%s)] %llu ests, %llu overshoots (%llu more sat/k/tx), %llu undershoots (%llu less sat/k/tx), %llu overblocks (%llu blocks/tx), %llu underblocks (%llu blocks/tx)\n",
+            "[bench::fees (%s|%s)] %llu ests, %llu overshoots (%llu more sat/k/tx), %llu undershoots (%llu less sat/k/tx), %llu failures\n",
             conservative ? "    conservative" : "non-conservative",
             mempoolOptim ? "    mempool" : "non-mempool",
             estimations,
@@ -523,10 +528,7 @@ struct EstimationSummary
             oversum / (overshoots + !overshoots),
             undershoots,
             undersum / (undershoots + !undershoots),
-            overblocks,
-            overblocksum / (overblocks + !overblocks),
-            underblocks,
-            underblocksum / (underblocks + !underblocks)
+            failures
         );
         printf("  blkt: {");
         for (int i = 0; i < 10; i++) {
