@@ -616,8 +616,13 @@ public:
 
     void addEstimation(uint8_t type, uint8_t blocks_target, double val, double& min, double& max) {
         printf("adding %u est with targ=%u; val=%f\n", type, blocks_target, val);
-        if (val < 0.1) return; // failed; skip
         std::vector<double>* vs[] = {&conservativeRateVector, &nonconservativeRateVector, &conservativeRateVectorMPO, &nonconservativeRateVectorMPO};
+        if (val < 0.1) {
+            vs[type]->push_back(-1);
+            bool* inblock[] = {cinblock, ncinblock, cminblock, ncminblock};
+            inblock[type] = true;
+            return; // failed; skip
+        }
         vs[type]->push_back(val);
         writeFlagWithTime(FLAG_NEW);
         fwrite(&type, 1, 1, estimationData);
