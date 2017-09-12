@@ -99,6 +99,7 @@ struct BlockStreamEntry
             sequence = hashSeqMap[txid];
         } else {
             sequence = hashSeqMap[txid] = ++sequenceCounter;
+            if (mempoolLoaded && (sequence % 100 == 0)) printf("<> %u\n", sequenceCounter);
         }
     }
     BlockStreamEntry(const CTxMemPoolEntry& me)
@@ -146,7 +147,7 @@ struct BlockStreamEntry
             fwrite(&fee_per_k, sizeof(double), 1, mempoolData);
         }
         mempoolLastTime = timestamp;
-        if (mempoolLoaded && (sequence % 100 == 0)) { printf("<> %u\n", sequenceCounter); fflush(mempoolData); }
+        if (mempoolLoaded && (sequence % 100 == 0)) fflush(mempoolData);
         if (hashSeqMapExpired.end() == std::find(hashSeqMapExpired.begin(), hashSeqMapExpired.end(), txid) &&
             (state & (STATE_CONFIRM | STATE_DISCARD))) {
             hashSeqMapExpired.insert(txid);
