@@ -559,6 +559,10 @@ struct EstimationSummary
             printf("\n");
         }
     }
+    size_t count()
+    {
+        return estimations;
+    }
 };
 
 static EstimationSummary
@@ -1369,11 +1373,12 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     shortStats->UpdateMovingAverages();
     longStats->UpdateMovingAverages();
 
+    bool printstats = estimationAttempts.size() + estsumC.count() + estsumNC.count() + estsumCM.count() + estsumNCM.count() > 0;
     unsigned int countedTxs = 0;
     uint32_t secs = uint32_t(GetTime() - finalPreviousChainTipChange);
     uint32_t mins = secs / 60;
     secs -= (mins * 60);
-    printf(
+    if (printstats) printf(
         "\n\n\n\n\n"
         "* * * * * * * * * * * * * * * * * * * * * * * * * * * * *\n"
         "   block %u after %02u:%02u\n"
@@ -1388,20 +1393,22 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
             countedTxs++;
     }
     std::sort(feesPerK.begin(), feesPerK.end());
-    if (feesPerK.size() > 9) {
+    if (printstats && feesPerK.size() > 9) {
         printf("fees: %f, %f, %f, ..., %f\n", feesPerK[0], feesPerK[1], feesPerK[2], feesPerK.back());
     }
-    if (feesPerK.size() > 100) {
+    if (printstats && feesPerK.size() > 100) {
         double lowest10thresh = feesPerK[std::max<size_t>(10, feesPerK.size() / 10)]; // sorted ascending, so 0 is lowest fee seen
         printf("lowest10thresh = %.6f\n", lowest10thresh);
     }
     for (auto it = estimationAttempts.begin(); it != estimationAttempts.end(); ) {
         it = it->apply(feesPerK) ? estimationAttempts.erase(it) : it + 1;
     }
-    estsumC.printstats();
-    estsumNC.printstats();
-    estsumCM.printstats();
-    estsumNCM.printstats();
+    if (printstats) {
+        estsumC.printstats();
+        estsumNC.printstats();
+        estsumCM.printstats();
+        estsumNCM.printstats();
+    }
     g_blockstream.processBlock(entries);
     fflush(estimationData);
 
