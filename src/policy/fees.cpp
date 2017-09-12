@@ -615,7 +615,7 @@ public:
     }
 
     void addEstimation(uint8_t type, uint8_t blocks_target, double val, double& min, double& max) {
-        printf("adding %u est with targ=%u; val=%f\n", type, blocks_target, val);
+        // printf("adding %u est with targ=%u; val=%f\n", type, blocks_target, val);
         std::vector<double>* vs[] = {&conservativeRateVector, &nonconservativeRateVector, &conservativeRateVectorMPO, &nonconservativeRateVectorMPO};
         if (val < 0.1) {
             bool* inblock[] = {cinblock, ncinblock, cminblock, ncminblock};
