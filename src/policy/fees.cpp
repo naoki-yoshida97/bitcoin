@@ -532,18 +532,18 @@ struct EstimationSummary
         );
         printf("  blkt: {");
         for (int i = 0; i < 10; i++) {
-            if (blockCountUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)blockCountUndershots[i] / undershoots);
+            if (blockCountUndershots[i]) printf(" %2d:%2.0f", i+1, 100.0 * (double)blockCountUndershots[i] / undershoots);
         }
         printf(" }\n");
         if (mempoolOptim) {
             printf("  time: {");
             for (int i = 0; i < 100; i++) {
-                if (timeUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)timeUndershots[i] / undershoots);
+                if (timeUndershots[i]) printf(" %2d:%2.0f", i+1, 100.0 * (double)timeUndershots[i] / undershoots);
             }
             printf(" }\n");
             printf("  perc: {");
             for (int i = 0; i < 200; i++) {
-                if (percUndershots[i]) printf(" %2d:%2.0f", i, 100.0 * (double)percUndershots[i] / undershoots);
+                if (percUndershots[i]) printf(" %2d:%2.0f", i+1, 100.0 * (double)percUndershots[i] / undershoots);
             }
             printf(" }\n");
         }
