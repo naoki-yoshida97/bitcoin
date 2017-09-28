@@ -105,9 +105,7 @@ struct BlockStreamEntry
     BlockStreamEntry(const CTxMemPoolEntry& me)
     : BlockStreamEntry(me.GetTx().GetHash(), me.GetTxSize(), me.GetTxWeight(), me.GetFee() * 1000 / me.GetTxSize())
     {}
-    double fee() const {
-        return fee_per_k * (double)weight / 1000.0;
-    }
+    double fee() const { return fee_per_k * (double)weight / 1000.0; }
     friend bool operator<(const BlockStreamEntry& a, const BlockStreamEntry& b) {
         return a.txid != b.txid &&
             (a.fee_per_k < b.fee_per_k ||
