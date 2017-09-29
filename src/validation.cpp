@@ -2212,6 +2212,7 @@ struct FeeEntry {
 
 static void ProcessBlockFees(const CBlock& block)
 {
+    uint32_t time = block.nTime;
     uint32_t blockHeight = chainActive.Tip() ? chainActive.Tip()->nHeight + 1 : 1;
     if (blockHeight < 1) return;
     if (!blockfeelog) {
@@ -2258,6 +2259,7 @@ static void ProcessBlockFees(const CBlock& block)
             blockWeight += e.weight;
         }
     }
+    fwrite(&time, sizeof(uint32_t), 1, blockfeelog);
     fwrite(&blockHeight, sizeof(uint32_t), 1, blockfeelog);
     fwrite(&blockWeight, sizeof(uint32_t), 1, blockfeelog);
     if (blockWeight > 3800000) {
