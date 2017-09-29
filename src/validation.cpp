@@ -60,6 +60,7 @@
  * Global state
  */
 
+FILE* blockfeelog = nullptr;
 CCriticalSection cs_main;
 
 BlockMap mapBlockIndex;
@@ -2179,6 +2180,102 @@ public:
     }
 };
 
+struct FeeEntry {
+    uint256 txid;
+    size_t size;
+    size_t weight;
+    double fee_rate;
+
+    FeeEntry(const CTransactionRef tx, CAmount fees) {
+        txid = tx->GetHash();
+        size = GetVirtualTransactionSize(*tx);
+        weight = GetTransactionWeight(*tx);
+        // fee = fee_per_k * size / 1000
+        // fee_per_k = fee * 1000 / size
+        fee_rate = (double)fees * 1000.0 / size;
+    }
+
+    friend bool operator<(const FeeEntry& a, const FeeEntry& b) {
+        return a.txid != b.txid &&
+            (a.fee_rate < b.fee_rate ||
+                (a.fee_rate == b.fee_rate && (a.weight > b.weight)));
+    }
+    friend bool operator==(const FeeEntry& a, const FeeEntry& b) {
+        return a.txid == b.txid;
+    }
+    void writelog() const {
+        fwrite(&size, sizeof(size_t), 1, blockfeelog);
+        fwrite(&weight, sizeof(size_t), 1, blockfeelog);
+        fwrite(&fee_rate, sizeof(double), 1, blockfeelog);
+    }
+};
+
+static void ProcessBlockFees(const CBlock& block)
+{
+    uint32_t blockHeight = chainActive.Tip() ? chainActive.Tip()->nHeight + 1 : 1;
+    if (blockHeight < 1) return;
+    if (!blockfeelog) {
+        blockfeelog = fopen("blockfeelog.dat", "ab");
+    }
+    std::set<FeeEntry> entries;
+    std::map<uint256,CTransactionRef> btxmap;
+    {
+        CCoinsViewCache view(pcoinsTip);
+        for (const CTransactionRef tx : block.vtx) {
+            btxmap[tx->GetHash()] = tx;
+            if (tx->IsCoinBase()) continue;
+            CAmount value_in = 0;
+            for (unsigned int i = 0; i < tx->vin.size(); i++) {
+                const Coin& c = view.AccessCoin(tx->vin[i].prevout);
+                if (!c.IsSpent()) {
+                    value_in += c.out.nValue;
+                } else if (btxmap.count(tx->vin[i].prevout.hash)) {
+                    // tx inside block
+                    const CTransactionRef ptx = btxmap[tx->vin[i].prevout.hash];
+                    const CTxOut& out = ptx->vout[tx->vin[i].prevout.n];
+                    value_in += out.nValue;
+                } else {
+                    assert(!"cannot find input tx");
+                }
+            }
+            CAmount fees = value_in - tx->GetValueOut();
+            if (fees < 0) {
+                printf("- found tx %s with neg fees (%lld): in=%lld, out=%lld\n", tx->GetHash().ToString().c_str(), fees, value_in, tx->GetValueOut());
+                for (unsigned int i = 0; i < tx->vin.size(); i++) {
+                    const Coin& c = view.AccessCoin(tx->vin[i].prevout);
+                    if (c.IsSpent()) {
+                        printf("  - spent (unknown) input %u\n", i);
+                    } else {
+                        CAmount v = view.AccessCoin(tx->vin[i].prevout).out.nValue;
+                        printf("  - input amount = %lld\n", v);
+                    }
+                }
+            }
+            assert(fees >= 0);
+            entries.insert(FeeEntry(tx, fees));
+        }
+    }
+    fwrite(&blockHeight, sizeof(uint32_t), 1, blockfeelog);
+    uint8_t flag = 0x1;
+    size_t thresh_count = entries.size() / 10;
+    if (thresh_count < 1) {
+        // "empty" block
+        flag = 0x0;
+        fwrite(&flag, 1, 1, blockfeelog);
+        return;
+    }
+    fwrite(&flag, 1, 1, blockfeelog);
+    auto it = entries.begin();
+    for (size_t i = 0; i < thresh_count; i++) {
+        ++it;
+    }
+    it->writelog();
+    static int64_t tslf = 0;
+    int64_t now = GetTime();
+    if (tslf && tslf + 60 < now) fflush(blockfeelog);
+    tslf = now;
+}
+
 /**
  * Connect a new block to chainActive. pblock is either nullptr or a pointer to a CBlock
  * corresponding to pindexNew, to bypass loading it again from disk.
@@ -2200,6 +2297,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         pthisBlock = pblock;
     }
     const CBlock& blockConnecting = *pthisBlock;
+    ProcessBlockFees(blockConnecting);
     // Apply the block atomically to the chain state.
     int64_t nTime2 = GetTimeMicros(); nTimeReadFromDisk += nTime2 - nTime1;
     int64_t nTime3;
@@ -4410,5 +4508,6 @@ public:
         for (; it1 != mapBlockIndex.end(); it1++)
             delete (*it1).second;
         mapBlockIndex.clear();
+        fclose(blockfeelog);
     }
 } instance_of_cmaincleanup;
