@@ -2217,6 +2217,7 @@ static void ProcessBlockFees(const CBlock& block)
     if (!blockfeelog) {
         blockfeelog = fopen("blockfeelog.dat", "ab");
     }
+    uint32_t blockWeight = 0;
     std::set<FeeEntry> entries;
     std::map<uint256,CTransactionRef> btxmap;
     {
@@ -2252,28 +2253,28 @@ static void ProcessBlockFees(const CBlock& block)
                 }
             }
             assert(fees >= 0);
-            entries.insert(FeeEntry(tx, fees));
+            FeeEntry e = FeeEntry(tx, fees);
+            entries.insert(e);
+            blockWeight += e.weight;
         }
     }
     fwrite(&blockHeight, sizeof(uint32_t), 1, blockfeelog);
-    uint8_t flag = 0x1;
-    size_t thresh_count = entries.size() / 10;
-    if (thresh_count < 1) {
-        // "empty" block
-        flag = 0x0;
-        fwrite(&flag, 1, 1, blockfeelog);
-        return;
+    fwrite(&blockWeight, sizeof(uint32_t), 1, blockfeelog);
+    if (blockWeight > 3800000) {
+        size_t thresh_count = 1 + (entries.size() / 10);
+        auto it = entries.begin();
+        auto pit = it;
+        for (size_t i = 0; it != entries.end() && i < thresh_count; i++) {
+            pit = it;
+            ++it;
+        }
+        if (it == entries.end()) it = pit;
+        fwrite(&it->fee_rate, sizeof(double), 1, blockfeelog);
+        static int64_t tslf = 0;
+        int64_t now = GetTime();
+        if (tslf && tslf + 60 < now) fflush(blockfeelog);
+        tslf = now;
     }
-    fwrite(&flag, 1, 1, blockfeelog);
-    auto it = entries.begin();
-    for (size_t i = 0; i < thresh_count; i++) {
-        ++it;
-    }
-    it->writelog();
-    static int64_t tslf = 0;
-    int64_t now = GetTime();
-    if (tslf && tslf + 60 < now) fflush(blockfeelog);
-    tslf = now;
 }
 
 /**
