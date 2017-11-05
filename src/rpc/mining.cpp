@@ -815,9 +815,9 @@ UniValue estimatefee(const JSONRPCRequest& request)
 
 UniValue estimatesmartfee(const JSONRPCRequest& request)
 {
-    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 3)
         throw std::runtime_error(
-            "estimatesmartfee conf_target (\"estimate_mode\")\n"
+            "estimatesmartfee conf_target (\"estimate_mode\" use_mempool)\n"
             "\nEstimates the approximate fee per kilobyte needed for a transaction to begin\n"
             "confirmation within conf_target blocks if possible and return the number of blocks\n"
             "for which the estimate is valid. Uses virtual transaction size as defined\n"
@@ -833,6 +833,9 @@ UniValue estimatesmartfee(const JSONRPCRequest& request)
             "       \"UNSET\" (defaults to CONSERVATIVE)\n"
             "       \"ECONOMICAL\"\n"
             "       \"CONSERVATIVE\"\n"
+            "3. use_mempool     (bool, optional, default=false) Optimize the fee rate using the current\n"
+            "                   state of the mempool. Note: this has a higher chance of undershooting,\n"
+            "                   so it is recommended that Replace-By-Fee (RBF) is enabled when used.\n"
             "\nResult:\n"
             "{\n"
             "  \"feerate\" : x.x,     (numeric, optional) estimate fee rate in " + CURRENCY_UNIT + "/kB\n"
@@ -848,7 +851,7 @@ UniValue estimatesmartfee(const JSONRPCRequest& request)
             + HelpExampleCli("estimatesmartfee", "6")
             );
 
-    RPCTypeCheck(request.params, {UniValue::VNUM, UniValue::VSTR});
+    RPCTypeCheck(request.params, {UniValue::VNUM, UniValue::VSTR, UniValue::VBOOL});
     RPCTypeCheckArgument(request.params[0], UniValue::VNUM);
     unsigned int conf_target = ParseConfirmTarget(request.params[0]);
     bool conservative = true;
@@ -859,11 +862,12 @@ UniValue estimatesmartfee(const JSONRPCRequest& request)
         }
         if (fee_mode == FeeEstimateMode::ECONOMICAL) conservative = false;
     }
+    bool use_mempool = !request.params[2].isNull() && request.params[2].get_bool();
 
     UniValue result(UniValue::VOBJ);
     UniValue errors(UniValue::VARR);
     FeeCalculation feeCalc;
-    CFeeRate feeRate = ::feeEstimator.estimateSmartFee(conf_target, &feeCalc, conservative);
+    CFeeRate feeRate = ::feeEstimator.estimateSmartFee(conf_target, &feeCalc, conservative, use_mempool);
     if (feeRate != CFeeRate(0)) {
         result.push_back(Pair("feerate", ValueFromAmount(feeRate.GetFeePerK())));
     } else {
