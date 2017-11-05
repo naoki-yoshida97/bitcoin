@@ -208,7 +208,13 @@ public:
      *  the closest target where one can be given.  'conservative' estimates are
      *  valid over longer time horizons also.
      */
-    CFeeRate estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative) const;
+    CFeeRate estimateSmartFee(int confTarget, FeeCalculation *feeCalc, bool conservative, bool optimized) const;
+
+    /** Estimate feerate to out-bid the transaction at the given percentile
+     *  in the next block, if a block was created now based on the transactions
+     *  in the mempool.
+     */
+    CFeeRate estimateMempoolFee(double percentile) const;
 
     /** Return a specific fee estimate calculation with a given success
      * threshold and time horizon, and optionally return detailed data about
