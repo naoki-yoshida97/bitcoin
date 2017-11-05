@@ -31,6 +31,8 @@ public:
     bool signalRbf;
     //! Fee estimation mode to control arguments to estimateSmartFee
     FeeEstimateMode m_fee_mode;
+    //! Use mempool optimization when doing fee estimation
+    bool m_mempool_optimized;
 
     CCoinControl()
     {
@@ -48,6 +50,7 @@ public:
         m_confirm_target.reset();
         signalRbf = fWalletRbf;
         m_fee_mode = FeeEstimateMode::UNSET;
+        m_mempool_optimized = false;
     }
 
     bool HasSelected() const

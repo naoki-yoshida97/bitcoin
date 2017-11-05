@@ -424,7 +424,7 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
         return NullUniValue;
     }
 
-    if (request.fHelp || request.params.size() < 2 || request.params.size() > 8)
+    if (request.fHelp || request.params.size() < 2 || request.params.size() > 9)
         throw std::runtime_error(
             "sendtoaddress \"address\" amount ( \"comment\" \"comment_to\" subtractfeefromamount replaceable conf_target \"estimate_mode\")\n"
             "\nSend an amount to a given address.\n"
@@ -445,6 +445,7 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
             "       \"UNSET\"\n"
             "       \"ECONOMICAL\"\n"
             "       \"CONSERVATIVE\"\n"
+            "9. use_mempool            (boolean, optional, default=false) Optimize fee rate using the current mempool state.\n"
             "\nResult:\n"
             "\"txid\"                  (string) The transaction id.\n"
             "\nExamples:\n"
@@ -494,6 +495,7 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
         }
     }
 
+    coin_control.m_mempool_optimized = !request.params[8].isNull() && request.params[8].get_bool();
 
     EnsureWalletIsUnlocked(pwallet);
 
