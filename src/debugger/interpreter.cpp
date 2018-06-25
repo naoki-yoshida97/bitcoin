@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <btcdeb/interpreter.h>
-#include <btcdeb/script.h>
+#include <debugger/interpreter.h>
+#include <debugger/script.h>
 
 InterpreterEnv::InterpreterEnv(std::vector<valtype>& stack_in, const CScript& script_in, unsigned int flags_in, const BaseSignatureChecker& checker_in, SigVersion sigversion_in, ScriptError* error_in)
 : ScriptExecutionEnvironment(script_in, stack_in, flags_in, checker_in)

@@ -5,7 +5,7 @@
 
 #include <pubkey.h>
 
-#include <btcdeb/script.h> // for btc_*logf
+#include <debugger/script.h> // for btc_*logf
 
 #include <secp256k1.h>
 #include <secp256k1_recovery.h>

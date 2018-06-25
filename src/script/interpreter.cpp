@@ -4,7 +4,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <script/interpreter.h>
-#include <btcdeb/interpreter.h>
+#include <debugger/interpreter.h>
 
 #include <inttypes.h> // PRId64 ...
 
@@ -12,7 +12,7 @@
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
 #include <pubkey.h>
-#include <btcdeb/script.h>
+#include <debugger/script.h>
 #include <uint256.h>
 
 bool CastToBool(const valtype& vch)

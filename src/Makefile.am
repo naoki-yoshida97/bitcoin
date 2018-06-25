@@ -86,10 +86,10 @@ if BUILD_BITCOIN_UTILS
   bin_PROGRAMS += bitcoin-cli bitcoin-tx
 endif
 
-# btcdeb #
+# debugger #
 LIBBITCOIN_DEB_H = \
-	btcdeb/interpreter.h \
-	btcdeb/script.h
+	debugger/interpreter.h \
+	debugger/script.h
 
 .PHONY: FORCE check-symbols check-security
 # bitcoin core #
@@ -211,14 +211,14 @@ obj/build.h: FORCE
 	  "$(abs_top_srcdir)"
 libbitcoin_util_a-clientversion.$(OBJEXT): obj/build.h
 
-# btcdeb #
+# debugger #
 
 libbitcoin_deb_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
 libbitcoin_deb_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libbitcoin_deb_a_SOURCES = \
-	btcdeb/hash.cpp \
-	btcdeb/interpreter.cpp \
-	btcdeb/script.cpp \
+	debugger/hash.cpp \
+	debugger/interpreter.cpp \
+	debugger/script.cpp \
 	$(BITCOIN_CORE_H)
 
 # server: shared between bitcoind and bitcoin-qt
@@ -352,12 +352,12 @@ libbitcoin_consensus_a_SOURCES = \
   primitives/transaction.h \
   pubkey.cpp \
   pubkey.h \
-  btcdeb/hash.cpp \
-  btcdeb/hash.h \
-  btcdeb/interpreter.cpp \
-  btcdeb/interpreter.h \
-  btcdeb/script.cpp \
-  btcdeb/script.h \
+  debugger/hash.cpp \
+  debugger/hash.h \
+  debugger/interpreter.cpp \
+  debugger/interpreter.h \
+  debugger/script.cpp \
+  debugger/script.h \
   script/bitcoinconsensus.cpp \
   script/interpreter.cpp \
   script/interpreter.h \
