@@ -32,6 +32,7 @@ LIBBITCOIN_UTIL=libbitcoin_util.a
 LIBBITCOIN_CRYPTO_BASE=crypto/libbitcoin_crypto_base.a
 LIBBITCOINQT=qt/libbitcoinqt.a
 LIBSECP256K1=secp256k1/libsecp256k1.la
+LIBBITCOIN_DEB=libbitcoin_deb.a
 
 if ENABLE_ZMQ
 LIBBITCOIN_ZMQ=libbitcoin_zmq.a
@@ -60,13 +61,15 @@ $(LIBSECP256K1): $(wildcard secp256k1/src/*) $(wildcard secp256k1/include/*)
 # But to build the less dependent modules first, we manually select their order here:
 EXTRA_LIBRARIES += \
   $(LIBBITCOIN_CRYPTO) \
+  $(LIBBITCOIN_DEB) \
   $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_CLI) \
   $(LIBBITCOIN_WALLET) \
-  $(LIBBITCOIN_ZMQ)
+  $(LIBBITCOIN_ZMQ) \
+  $(LIBBITCOIN_DEB)
 
 lib_LTLIBRARIES = $(LIBBITCOINCONSENSUS)
 
@@ -83,9 +86,15 @@ if BUILD_BITCOIN_UTILS
   bin_PROGRAMS += bitcoin-cli bitcoin-tx
 endif
 
+# btcdeb #
+LIBBITCOIN_DEB_H = \
+	btcdeb/interpreter.h \
+	btcdeb/script.h
+
 .PHONY: FORCE check-symbols check-security
 # bitcoin core #
 BITCOIN_CORE_H = \
+  $(LIBBITCOIN_DEB_H) \
   addrdb.h \
   addrman.h \
   base58.h \
@@ -201,6 +210,16 @@ obj/build.h: FORCE
 	@$(top_srcdir)/share/genbuild.sh "$(abs_top_builddir)/src/obj/build.h" \
 	  "$(abs_top_srcdir)"
 libbitcoin_util_a-clientversion.$(OBJEXT): obj/build.h
+
+# btcdeb #
+
+libbitcoin_deb_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
+libbitcoin_deb_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+libbitcoin_deb_a_SOURCES = \
+	btcdeb/hash.cpp \
+	btcdeb/interpreter.cpp \
+	btcdeb/script.cpp \
+	$(BITCOIN_CORE_H)
 
 # server: shared between bitcoind and bitcoin-qt
 libbitcoin_server_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(MINIUPNPC_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
@@ -333,6 +352,12 @@ libbitcoin_consensus_a_SOURCES = \
   primitives/transaction.h \
   pubkey.cpp \
   pubkey.h \
+  btcdeb/hash.cpp \
+  btcdeb/hash.h \
+  btcdeb/interpreter.cpp \
+  btcdeb/interpreter.h \
+  btcdeb/script.cpp \
+  btcdeb/script.h \
   script/bitcoinconsensus.cpp \
   script/interpreter.cpp \
   script/interpreter.h \
@@ -430,6 +455,7 @@ bitcoind_LDADD = \
   $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_DEB) \
   $(LIBUNIVALUE) \
   $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_ZMQ) \
@@ -454,6 +480,7 @@ endif
 
 bitcoin_cli_LDADD = \
   $(LIBBITCOIN_CLI) \
+  $(LIBBITCOIN_DEB) \
   $(LIBUNIVALUE) \
   $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO)
@@ -473,6 +500,7 @@ endif
 
 bitcoin_tx_LDADD = \
   $(LIBUNIVALUE) \
+  $(LIBBITCOIN_DEB) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CONSENSUS) \
