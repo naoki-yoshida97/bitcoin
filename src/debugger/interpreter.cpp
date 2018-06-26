@@ -87,7 +87,7 @@ bool StepScript(InterpreterEnv& env)
                 printf("- %s\n", HexStr(it).c_str());
             }
             printf("Script:\n");
-            CScript::const_iterator it = script.begin();
+            CScriptIter it = script.begin();
             valtype vchPushValue;
             opcodetype opcode;
             while (script.GetOp(it, opcode, vchPushValue)) {

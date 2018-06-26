@@ -124,7 +124,7 @@ bool CBasicKeyStore::GetCScript(const CScriptID &hash, CScript& redeemScriptOut)
 static bool ExtractPubKey(const CScript &dest, CPubKey& pubKeyOut)
 {
     //TODO: Use Solver to extract this?
-    CScript::const_iterator pc = dest.begin();
+    CScriptIter pc = dest.begin();
     opcodetype opcode;
     std::vector<unsigned char> vch;
     if (!dest.GetOp(pc, opcode, vch) || !CPubKey::ValidSize(vch))

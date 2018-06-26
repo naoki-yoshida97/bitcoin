@@ -29,10 +29,10 @@ UniValue ValueFromAmount(const CAmount& amount)
 std::string FormatScript(const CScript& script)
 {
     std::string ret;
-    CScript::const_iterator it = script.begin();
+    CScriptIter it = script.begin();
     opcodetype op;
     while (it != script.end()) {
-        CScript::const_iterator it2 = it;
+        CScriptIter it2 = it;
         std::vector<unsigned char> vch;
         if (script.GetOp(it, op, vch)) {
             if (op == OP_0) {
@@ -82,7 +82,7 @@ std::string ScriptToAsmStr(const CScript& script, const bool fAttemptSighashDeco
     std::string str;
     opcodetype opcode;
     std::vector<unsigned char> vch;
-    CScript::const_iterator pc = script.begin();
+    CScriptIter pc = script.begin();
     while (pc < script.end()) {
         if (!str.empty()) {
             str += " ";

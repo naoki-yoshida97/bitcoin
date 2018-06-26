@@ -50,10 +50,10 @@ static inline void _popstack(std::vector<valtype>& stack)
 #define pushstack(stack, v) do { stack.push_back(v); btc_logf("\t\t<> PUSH " #stack " %s\n", HexStr(stack.at(stack.size()-1)).c_str()); } while (0)
 
 struct InterpreterEnv : public ScriptExecutionEnvironment {
-    CScript::const_iterator pc;
+    CScriptIter pc;
     std::vector<stack_type> stack_history;
     std::vector<stack_type> altstack_history;
-    std::vector<CScript::const_iterator> pc_history;
+    std::vector<CScriptIter> pc_history;
     std::vector<int> nOpCount_history;
     std::vector<CScript> script_history;
     const CScript& scriptIn;
@@ -70,7 +70,7 @@ struct InterpreterEnv : public ScriptExecutionEnvironment {
 
 bool StepScript(InterpreterEnv& env);
 bool ContinueScript(InterpreterEnv& env);
-bool ExecIterator(InterpreterEnv& env, const CScript& script, CScript::const_iterator& it, bool update_env);
+bool ExecIterator(InterpreterEnv& env, const CScript& script, CScriptIter& it, bool update_env);
 bool RewindScript(InterpreterEnv& env);
 
 #endif // BITCOIN_BTCDEB_INTERPRETER_H

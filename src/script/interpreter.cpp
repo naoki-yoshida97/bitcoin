@@ -233,7 +233,7 @@ int FindAndDelete(CScript& script, const CScript& b)
     if (b.empty())
         return nFound;
     CScript result;
-    CScript::const_iterator pc = script.begin(), pc2 = script.begin(), end = script.end();
+    CScriptIter pc = script.begin(), pc2 = script.begin(), end = script.end();
     opcodetype opcode;
     do
     {
@@ -255,7 +255,7 @@ int FindAndDelete(CScript& script, const CScript& b)
     return nFound;
 }
 
-bool StepScript(ScriptExecutionEnvironment& env, CScript::const_iterator& pc)
+bool StepScript(ScriptExecutionEnvironment& env, CScriptIter& pc)
 {
     static const CScriptNum bnZero(0);
     static const CScriptNum bnOne(1);
@@ -1060,7 +1060,7 @@ bool StepScript(ScriptExecutionEnvironment& env, CScript::const_iterator& pc)
     return true;
 }
 
-ScriptExecutionEnvironment::ScriptExecutionEnvironment(const CScript& script_in, std::vector<std::vector<unsigned char> >& stack_in, unsigned int flags_in, const BaseSignatureChecker& checker_in)
+ScriptExecutionEnvironment::ScriptExecutionEnvironment(std::vector<std::vector<unsigned char> >& stack_in, const CScript& script_in, unsigned int flags_in, const BaseSignatureChecker& checker_in)
 : script(script_in)
 , pend(script.end())
 , pbegincodehash(script.begin())
@@ -1073,8 +1073,8 @@ ScriptExecutionEnvironment::ScriptExecutionEnvironment(const CScript& script_in,
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror)
 {
-    ScriptExecutionEnvironment env(script, stack, flags, checker);
-    CScript::const_iterator pc = script.begin();
+    ScriptExecutionEnvironment env(stack, script, flags, checker);
+    CScriptIter pc = script.begin();
     set_error(serror, SCRIPT_ERR_UNKNOWN_ERROR);
     if (script.size() > MAX_SCRIPT_SIZE)
         return set_error(serror, SCRIPT_ERR_SCRIPT_SIZE);
@@ -1124,8 +1124,8 @@ public:
     /** Serialize the passed scriptCode, skipping OP_CODESEPARATORs */
     template<typename S>
     void SerializeScriptCode(S &s) const {
-        CScript::const_iterator it = scriptCode.begin();
-        CScript::const_iterator itBegin = it;
+        CScriptIter it = scriptCode.begin();
+        CScriptIter itBegin = it;
         opcodetype opcode;
         unsigned int nCodeSeparators = 0;
         while (scriptCode.GetOp(it, opcode)) {
@@ -1697,7 +1697,7 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
     }
 
     if (scriptPubKey.IsPayToScriptHash() && scriptSig.IsPushOnly()) {
-        CScript::const_iterator pc = scriptSig.begin();
+        CScriptIter pc = scriptSig.begin();
         std::vector<unsigned char> data;
         while (pc < scriptSig.end()) {
             opcodetype opcode;

@@ -265,7 +265,7 @@ std::string CScriptWitness::ToString() const
 
 bool CScript::HasValidOps() const
 {
-    CScript::const_iterator it = begin();
+    CScriptIter it = begin();
     while (it < end()) {
         opcodetype opcode;
         std::vector<unsigned char> item;

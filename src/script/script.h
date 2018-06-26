@@ -561,6 +561,8 @@ public:
     }
 };
 
+typedef CScript::const_iterator CScriptIter;
+
 struct CScriptWitness
 {
     // Note that this encodes the data elements being pushed, rather than

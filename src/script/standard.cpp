@@ -67,7 +67,7 @@ static bool MatchMultisig(const CScript& script, unsigned int& required, std::ve
 {
     opcodetype opcode;
     valtype data;
-    CScript::const_iterator it = script.begin();
+    CScriptIter it = script.begin();
     if (script.size() < 1 || script.back() != OP_CHECKMULTISIG) return false;
 
     if (!script.GetOp(it, opcode, data) || !IsSmallInteger(opcode)) return false;
