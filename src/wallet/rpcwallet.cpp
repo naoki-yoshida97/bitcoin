@@ -19,6 +19,7 @@
 #include <rpc/util.h>
 #include <script/descriptor.h>
 #include <script/sign.h>
+#include <signet.h>
 #include <util/bip32.h>
 #include <util/fees.h>
 #include <util/moneystr.h>
@@ -32,6 +33,8 @@
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 #include <wallet/walletutil.h>
+
+#include <consensus/merkle.h> // signet merkle root
 
 #include <stdint.h>
 
@@ -3410,6 +3413,96 @@ static UniValue bumpfee(const JSONRPCRequest& request)
     return result;
 }
 
+void SignBlockWithWallet(CBlock& block, CWallet* const pwallet)
+{
+    SignatureData solution_in;
+
+    std::vector<uint8_t> signet_commitment;
+    if (block.GetWitnessCommitmentSection(SIGNET_HEADER, signet_commitment) && signet_commitment.size() > 8) {
+        solution_in = SignatureData(CScript(signet_commitment.begin() + 8, signet_commitment.end()));
+    }
+
+    auto signet_hash = GetSignetHash(block);
+
+    CScript blockscript(g_signet_blockscript.begin(), g_signet_blockscript.end());
+
+    std::vector<uint8_t> sigdata;
+    SignatureData solution(solution_in);
+    bool res = ProduceSignature(*pwallet, SimpleSignatureCreator(signet_hash), blockscript, solution);
+    if (!res) {
+        throw JSONRPCError(RPC_VERIFY_ERROR, "could not produce a signature -- do you have the private key(s)?");
+    }
+    signet_commitment.clear();
+    signet_commitment.insert(signet_commitment.begin(), solution.scriptSig.begin(), solution.scriptSig.end());
+    block.SetWitnessCommitmentSection(SIGNET_HEADER, signet_commitment);
+}
+
+UniValue signblock(const JSONRPCRequest& request)
+{
+    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    CWallet* const pwallet = wallet.get();
+
+    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+        return NullUniValue;
+    }
+
+    if (request.fHelp || request.params.size() != 1) {
+        throw std::runtime_error(
+            RPCHelpMan{"signblock",
+                "\nSigns a block proposal, checking that it would be accepted first.\n"
+                "(Note: only useable with signet networks.)\n",
+                {
+                    {"blockhex", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The hex-encoded block from getnewblockhex, or a filename"},
+                },
+                RPCResult{
+                    " sig      (hex) The signature\n"
+                },
+                RPCExamples{
+                    HelpExampleCli("signblock", "0000002018c6f2f913f9902aeab...5ca501f77be96de63f609010000000000000000015100000000")
+                },
+            }.ToString());
+    }
+
+    if (!g_signet_blocks) {
+        throw std::runtime_error("signblock can only be used with signet networks");
+    }
+
+    CBlock block;
+    if (!DecodeHexBlk(block, request.params[0].get_str())) {
+        FILE* fp = fopen(request.params[0].get_str().c_str(), "rb");
+        if (fp) {
+            std::string block_str;
+            char buf[1025];
+            size_t r;
+            buf[1024] = 0;
+            while (0 < (r = fread(buf, 1, 1024, fp))) { buf[r] = 0; block_str += buf; }
+            while (block_str.size() > 0 && block_str[block_str.size() - 1] == '\n') block_str = block_str.substr(0, block_str.size() - 1);
+            fclose(fp);
+            if (!DecodeHexBlk(block, block_str)) {
+                throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode (from file) failed");
+            }
+        } else {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block decode failed");
+        }
+    }
+
+    auto locked_chain = pwallet->chain().lock();
+    LOCK(pwallet->cs_wallet);
+
+    uint256 hash = block.GetHash();
+    if (nullopt != locked_chain->getBlockHeight(hash)) {
+        throw JSONRPCError(RPC_VERIFY_ERROR, "already have block");
+    }
+
+    SignBlockWithWallet(block, pwallet);
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION);
+    ssBlock << block;
+
+    return HexStr(ssBlock.begin(), ssBlock.end());
+}
+
 UniValue rescanblockchain(const JSONRPCRequest& request)
 {
     std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
@@ -4183,6 +4276,9 @@ static const CRPCCommand commands[] =
     { "wallet",             "walletpassphrase",                 &walletpassphrase,              {"passphrase","timeout"} },
     { "wallet",             "walletpassphrasechange",           &walletpassphrasechange,        {"oldpassphrase","newpassphrase"} },
     { "wallet",             "walletprocesspsbt",                &walletprocesspsbt,             {"psbt","sign","sighashtype","bip32derivs"} },
+
+    /** Signet mining */
+    { "signet",             "signblock",                        &signblock,                     {"blockhex"} },
 };
 // clang-format on
 
