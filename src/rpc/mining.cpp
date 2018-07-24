@@ -151,6 +151,28 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
     return blockHashes;
 }
 
+UniValue getnewblockhex(const JSONRPCRequest& request);
+
+UniValue GenerateSignetBlocksWithCoinbase(int count, const CScript& coinbase_script)
+{
+    UniValue params(UniValue::VARR);
+    UniValue t(UniValue::VBOOL);
+    t.setBool(true);
+    UniValue c(UniValue::VSTR);
+    c.setStr(HexStr(coinbase_script));
+    params.push_back(t);
+    params.push_back(c);
+    JSONRPCRequest req;
+    req.params = params;
+
+    UniValue blockHashes(UniValue::VARR);
+    for (int i = 0; i < count; ++i) {
+        blockHashes.push_back(getnewblockhex(req));
+    }
+
+    return blockHashes;
+}
+
 static UniValue generatetoaddress(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 2 || request.params.size() > 3)
@@ -177,6 +199,10 @@ static UniValue generatetoaddress(const JSONRPCRequest& request)
     CTxDestination destination = DecodeDestination(request.params[1].get_str());
     if (!IsValidDestination(destination)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Invalid address");
+    }
+
+    if (g_solution_blocks) {
+        return GenerateSignetBlocksWithCoinbase(nGenerate, GetScriptForDestination(destination));
     }
 
     std::shared_ptr<CReserveScript> coinbaseScript = std::make_shared<CReserveScript>();
@@ -694,7 +720,7 @@ protected:
     }
 };
 
-static UniValue submitblock(const JSONRPCRequest& request)
+UniValue submitblock(const JSONRPCRequest& request)
 {
     // We allow 2 arguments for compliance with BIP22. Argument 2 is ignored.
     if (request.fHelp || request.params.size() < 1 || request.params.size() > 2) {
@@ -724,6 +750,11 @@ static UniValue submitblock(const JSONRPCRequest& request)
     }
 
     uint256 hash = block.GetHash();
+
+    if (!request.params[1].isNull()) {
+        g_blockheader_payload_map[hash] = ParseHex(request.params[1].get_str());
+    }
+
     {
         LOCK(cs_main);
         const CBlockIndex* pindex = LookupBlockIndex(hash);
@@ -940,7 +971,6 @@ static const CRPCCommand commands[] =
     { "mining",             "prioritisetransaction",  &prioritisetransaction,  {"txid","dummy","fee_delta"} },
     { "mining",             "getblocktemplate",       &getblocktemplate,       {"template_request"} },
     { "mining",             "submitblock",            &submitblock,            {"hexdata","dummy"} },
-
 
     { "generating",         "generatetoaddress",      &generatetoaddress,      {"nblocks","address","maxtries"} },
 

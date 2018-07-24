@@ -50,6 +50,13 @@ MSG_BLOCK = 2
 MSG_WITNESS_FLAG = 1 << 30
 MSG_TYPE_MASK = 0xffffffff >> 2
 
+SOLUTION_BLOCKS = False
+SOLUTION_LEN = 80 # TODO: customizify
+
+def enable_signet():
+    global SOLUTION_BLOCKS
+    SOLUTION_BLOCKS = True
+
 # Serialization/deserialization tools
 def sha256(s):
     return hashlib.new('sha256', s).digest()
@@ -103,6 +110,23 @@ def ser_uint256(u):
         rs += struct.pack("<I", u & 0xFFFFFFFF)
         u >>= 32
     return rs
+
+
+def deser_sol(f):
+    nit = deser_compact_size(f)
+    rem = SOLUTION_LEN - nit - len(ser_compact_size(nit))
+    r = f.read(nit)
+    if rem > 0:
+        t = f.read(rem)
+    return r
+
+def ser_sol(s):
+    t = s
+    rem = SOLUTION_LEN - len(ser_compact_size(len(s))) + len(s)
+    while rem > 0:
+        t = t + b" "
+        rem = rem - 1
+    return ser_compact_size(len(s)) + t
 
 
 def uint256_from_str(s):
@@ -508,6 +532,8 @@ class CBlockHeader():
             self.nBits = header.nBits
             self.nNonce = header.nNonce
             self.sha256 = header.sha256
+            if SOLUTION_BLOCKS:
+                self.solution = header.solution
             self.hash = header.hash
             self.calc_sha256()
 
@@ -519,6 +545,8 @@ class CBlockHeader():
         self.nBits = 0
         self.nNonce = 0
         self.sha256 = None
+        if SOLUTION_BLOCKS:
+            self.solution = b""
         self.hash = None
 
     def deserialize(self, f):
@@ -529,6 +557,8 @@ class CBlockHeader():
         self.nBits = struct.unpack("<I", f.read(4))[0]
         self.nNonce = struct.unpack("<I", f.read(4))[0]
         self.sha256 = None
+        if SOLUTION_BLOCKS:
+            self.solution = deser_sol(f)
         self.hash = None
 
     def serialize(self):
@@ -539,6 +569,8 @@ class CBlockHeader():
         r += struct.pack("<I", self.nTime)
         r += struct.pack("<I", self.nBits)
         r += struct.pack("<I", self.nNonce)
+        if SOLUTION_BLOCKS:
+            r += ser_sol(self.solution)
         return r
 
     def calc_sha256(self):
