@@ -44,14 +44,12 @@ class SigMiningTest(BitcoinTestFramework):
         self.skip_if_no_wallet()
 
     def run_test(self):
-        n1 = self.nodes[0]
-        n2 = self.nodes[1]
-        node = n1
+        node = self.nodes[0]
 
         # give the privkey to node 1 so it can sign
-        n1.importprivkey(private_key)
+        node.importprivkey(private_key)
         self.log.info('Imported network private key')
-        self.log.info('address: %s, privkey: %s' % (address, n1.dumpprivkey(address)))
+        self.log.info('address: %s, privkey: %s' % (address, node.dumpprivkey(address)))
 
         self.log.info('getmininginfo')
         mining_info = node.getmininginfo()

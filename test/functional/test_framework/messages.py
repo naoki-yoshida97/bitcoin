@@ -117,12 +117,12 @@ def deser_sol(f):
     rem = SOLUTION_LEN - nit - len(ser_compact_size(nit))
     r = f.read(nit)
     if rem > 0:
-        t = f.read(rem)
+        f.read(rem)
     return r
 
 def ser_sol(s):
     t = s
-    rem = SOLUTION_LEN - len(ser_compact_size(len(s))) + len(s)
+    rem = SOLUTION_LEN - len(s) - len(ser_compact_size(len(s)))
     while rem > 0:
         t = t + b" "
         rem = rem - 1
