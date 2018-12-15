@@ -1419,13 +1419,11 @@ template class GenericTransactionSignatureChecker<CMutableTransaction>;
 bool SimpleSignatureChecker::CheckSig(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
 {
     CPubKey pubkey(vchPubKey);
-    if (!pubkey.IsValid())
-        return false;
+    if (!pubkey.IsValid()) return false;
 
     // Hash type is one byte tacked on to the end of the signature
     std::vector<unsigned char> vchSig(vchSigIn);
-    if (vchSig.empty())
-        return false;
+    if (vchSig.empty()) return false;
     // int nHashType = vchSig.back();
     vchSig.pop_back();
 
