@@ -4059,7 +4059,7 @@ UniValue getnewblockhex(const JSONRPCRequest& request)
         JSONRPCRequest req;
         req.params = params;
         submitblock(req);
-        return HexStr(hash);
+        return hash.GetHex();
     }
 
     return HexStr(ssBlock.begin(), ssBlock.end());

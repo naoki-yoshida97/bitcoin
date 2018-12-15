@@ -16,7 +16,7 @@ std::map<uint256,std::vector<uint8_t>> g_blockheader_payload_map;
 
 uint256 CBlockHeader::GetHash() const
 {
-    return SerializeHash(*this);
+    return SerializeHash(*this, SER_GETHASH, SERIALIZE_TRANSACTION_NO_WITNESS);
 }
 
 std::string CBlock::ToString() const

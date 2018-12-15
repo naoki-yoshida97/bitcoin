@@ -287,28 +287,23 @@ public:
  */
 class SigNetParams : public CChainParams {
 public:
-    SigNetParams(const ChainParamArgs& args) {
-        for (const auto& a : args) {
-            for (const auto& b : a.second) {
-                printf("%s : %s\n", a.first.c_str(), b.c_str());
-            }
+    SigNetParams(const ArgsManager& args) {
+        if (!args.IsArgSet("-signet_blockscript") || !args.IsArgSet("-signet_siglen")) {
+            throw std::runtime_error("%s: -signet_blockscript and -signet_siglen are both mandatory for signet networks");
         }
-        if (!args.count("signet_blockscript") || !args.count("signet_siglen")) {
-            throw std::runtime_error(strprintf("%s: Signet requires -signet_blockscript and -signet_siglen provided.", __func__));
-        }
-        if (args.at("signet_blockscript").size() != 1) {
+        if (args.GetArgs("-signet_blockscript").size() != 1) {
             throw std::runtime_error(strprintf("%s: -signet_blockscript cannot be multiple values.", __func__));
         }
-        if (args.at("signet_siglen").size() != 1) {
+        if (args.GetArgs("-signet_siglen").size() != 1) {
             throw std::runtime_error(strprintf("%s: -signet_siglen cannot be multiple values.", __func__));
         }
 
-        LogPrintf("SigNet with block script %s\n", args.at("signet_blockscript")[0]);
+        LogPrintf("SigNet with block script %s\n", gArgs.GetArgs("-signet_blockscript")[0]);
 
         strNetworkID = "signet";
-        consensus.blockscript = ParseHex(args.at("signet_blockscript")[0]);
-        g_solution_block_len = consensus.siglen = atoi64(args.at("signet_siglen")[0]);
         consensus.signature_pow = true;
+        consensus.blockscript = ParseHex(args.GetArgs("-signet_blockscript")[0]);
+        consensus.siglen = g_solution_block_len = atoi64(args.GetArgs("-signet_siglen")[0]);
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP34Height = 1;
         consensus.BIP65Height = 1;
@@ -351,8 +346,8 @@ public:
 
         vFixedSeeds.clear();
         vSeeds.clear();
-        if (args.count("signet_seednode")) {
-            vSeeds = args.at("signet_seednode");
+        if (args.IsArgSet("-signet_seednode")) {
+            vSeeds = gArgs.GetArgs("-signet_seednode");
         }
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>{125};
@@ -456,7 +451,7 @@ const CChainParams &Params() {
     return *globalChainParams;
 }
 
-std::unique_ptr<CChainParams> CreateChainParams(const std::string& chain, const ChainParamArgs& args)
+std::unique_ptr<const CChainParams> CreateChainParams(const std::string& chain)
 {
     if (chain == CBaseChainParams::MAIN)
         return std::unique_ptr<CChainParams>(new CMainParams());
@@ -466,32 +461,15 @@ std::unique_ptr<CChainParams> CreateChainParams(const std::string& chain, const 
         return std::unique_ptr<CChainParams>(new CRegTestParams());
     else if (chain == CBaseChainParams::SIGNET) {
         g_solution_blocks = true;
-        return std::unique_ptr<CChainParams>(new SigNetParams(args));
+        return std::unique_ptr<CChainParams>(new SigNetParams(gArgs));
     }
     throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }
 
 void SelectParams(const std::string& network)
 {
-    ChainParamArgs chain_args;
-    if (gArgs.IsArgSet("-signet_blockscript") && gArgs.IsArgSet("-signet_siglen")) {
-        chain_args["signet_blockscript"] = gArgs.GetArgs("-signet_blockscript");
-        chain_args["signet_siglen"] = gArgs.GetArgs("-signet_siglen");
-        if (gArgs.IsArgSet("-signet_seednode")) {
-            chain_args["signet_seednode"] = gArgs.GetArgs("-signet_seednode");
-        }
-    } else if (gArgs.IsArgSet("-signet_blockscript") || gArgs.IsArgSet("-signet_siglen")) {
-        throw std::runtime_error("%s: -signet_blockscript and -signet_siglen are both mandatory for signet networks");
-    } else {
-        chain_args["signet_blockscript"].push_back("512103e464a9f3070da4d3e0b34ce971ff36f3e07c47a8f4beadf32e8ea7e2afa8a82451ae");
-        chain_args["signet_siglen"].push_back("77");
-        if (!gArgs.IsArgSet("-signet_seednode")) {
-            chain_args["signet_seednode"].push_back("178.128.221.177"); // DG seed node
-        }
-    }
-
     SelectBaseParams(network);
-    globalChainParams = CreateChainParams(network, chain_args);
+    globalChainParams = CreateChainParams(network);
 }
 
 void UpdateVersionBitsParameters(Consensus::DeploymentPos d, int64_t nStartTime, int64_t nTimeout)

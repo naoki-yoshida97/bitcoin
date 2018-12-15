@@ -60,7 +60,7 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         READWRITE(nNonce);
-        if (g_solution_blocks && !(s.GetType() & SER_GETHASH)) {
+        if (g_solution_blocks && !(s.GetVersion() & SERIALIZE_TRANSACTION_NO_WITNESS)) {
             READWRITE(g_blockheader_payload_map[GetHash()]);
             size_t len = GetSizeOfCompactSize(g_blockheader_payload_map[GetHash()].size()) + g_blockheader_payload_map[GetHash()].size();
             while (len < g_solution_block_len) {
