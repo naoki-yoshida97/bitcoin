@@ -289,7 +289,7 @@ class SigNetParams : public CChainParams {
 public:
     SigNetParams(const ArgsManager& args) {
         if (!args.IsArgSet("-signet_blockscript") || !args.IsArgSet("-signet_siglen")) {
-            throw std::runtime_error("%s: -signet_blockscript and -signet_siglen are both mandatory for signet networks");
+            throw std::runtime_error(strprintf("%s: -signet_blockscript and -signet_siglen are both mandatory for signet networks", __func__));
         }
         if (args.GetArgs("-signet_blockscript").size() != 1) {
             throw std::runtime_error(strprintf("%s: -signet_blockscript cannot be multiple values.", __func__));
