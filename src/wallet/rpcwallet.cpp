@@ -3900,13 +3900,12 @@ void SignBlockHashWithWallet(const uint256& hash, CWallet* const pwallet)
         solution_in = SignatureData(CScript(g_blockheader_payload_map[hash].begin(), g_blockheader_payload_map[hash].end()));
     }
     CScript blockscript(Params().GetConsensus().blockscript.begin(), Params().GetConsensus().blockscript.end());
-    size_t siglen = gArgs.GetArg("-signet_siglen", 0);
 
     // sign until we have a sufficiently small signature, or until we run out of tries
     bool res;
     size_t smallest = 9999;
     std::vector<uint8_t> sigdata;
-    size_t overhead = GetSizeOfCompactSize(siglen);
+    size_t overhead = GetSizeOfCompactSize(g_solution_block_len);
     for (size_t i = 0; i < 1000; ++i) {
         SignatureData solution(solution_in);
         res = ProduceSignature(*pwallet, SimpleSignatureCreator(hash), blockscript, solution);
@@ -3915,14 +3914,14 @@ void SignBlockHashWithWallet(const uint256& hash, CWallet* const pwallet)
         }
         if (solution.scriptSig.size() < smallest) {
             smallest = solution.scriptSig.size();
-            if (!siglen || smallest + overhead <= siglen) {
+            if (!g_solution_block_len || smallest + overhead <= g_solution_block_len) {
                 sigdata = std::vector<uint8_t>(solution.scriptSig.begin(), solution.scriptSig.end());
                 break;
             }
         }
     }
-    if (siglen && sigdata.size() == 0) {
-        throw JSONRPCError(RPC_VERIFY_ERROR, strprintf("unable to produce a signature of size <= %zu (smallest found was %zu)", siglen, smallest + overhead));
+    if (g_solution_block_len && sigdata.size() == 0) {
+        throw JSONRPCError(RPC_VERIFY_ERROR, strprintf("unable to produce a signature of size <= %zu (smallest found was %zu)", g_solution_block_len, smallest + overhead));
     }
 
     g_blockheader_payload_map[hash] = sigdata;
@@ -3937,22 +3936,26 @@ UniValue signblock(const JSONRPCRequest& request)
         return NullUniValue;
     }
 
-    if (!g_solution_blocks) {
-        throw std::runtime_error(
-            "signblock can only be used with signet networks"
-        );
-    }
-
     if (request.fHelp || request.params.size() != 1) {
         throw std::runtime_error(
-            "signblock \"blockhex\"\n"
-            "\nSigns a block proposal, checking that it would be accepted first\n"
-            "\nArguments:\n"
-            "1. \"blockhex\"    (string, required) The hex-encoded block from getnewblockhex\n"
+            RPCHelpMan{"signblock",
+                "\nSigns a block proposal, checking that it would be accepted first.\n"
+                "(Note: only useable with signet networks.)\n",
+                {
+                    {"blockhex", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "The hex-encoded block from getnewblockhex"},
+                }
+            }
+            .ToString() +
             "\nResult\n"
             " sig      (hex) The signature\n"
             "\nExamples:\n"
             + HelpExampleCli("signblock", "0000002018c6f2f913f9902aeab...5ca501f77be96de63f609010000000000000000015100000000")
+        );
+    }
+
+    if (!g_solution_blocks) {
+        throw std::runtime_error(
+            "signblock can only be used with signet networks"
         );
     }
 
@@ -3998,12 +4001,15 @@ UniValue getnewblockhex(const JSONRPCRequest& request)
 
     if (request.fHelp || request.params.size() > 2) {
         throw std::runtime_error(
-            "getnewblockhex ( broadcast coinbase_script )\n"
-            "\nGets hex representation of a proposed, unmined new block, optionally\n"
-            "signing and broadcasting it to the network.\n"
-            "\nArguments:\n"
-            "1. broadcast       (boolean, optional, default=false) Sign and broadcast the block immediately, returning the blockhash\n"
-            "2. coinbase_script (data, optional) A custom coinbase script"
+            RPCHelpMan{"getnewblockhex",
+                "\nGets hex representation of a proposed, unmined new block, optionally\n"
+                "signing and broadcasting it to the network.\n",
+                {
+                    {"broadcast", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Sign and broadcast the block immediately, returning the blockhash"},
+                    {"coinbase_script", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "A custom coinbase script"},
+                }
+            }
+            .ToString() +
             "\nResult (for broadcast=false)\n"
             "blockhex      (hex) The block hex\n"
             "\nResult (for broadcast=true)\n"

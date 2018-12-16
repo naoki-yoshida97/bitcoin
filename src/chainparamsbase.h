@@ -16,7 +16,7 @@
 class CBaseChainParams
 {
 public:
-    /** BIP70 chain name strings (main, test (, sigtest) or regtest) */
+    /** BIP70 chain name strings (main, test, sigtest or regtest) */
     static const std::string MAIN;
     static const std::string TESTNET;
     static const std::string SIGNET;
