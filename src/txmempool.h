@@ -28,6 +28,8 @@
 #include <boost/multi_index/sequenced_index.hpp>
 #include <boost/signals2/signal.hpp>
 
+#include <bcq/bitcoin.h>
+
 class CBlockIndex;
 extern CCriticalSection cs_main;
 
@@ -442,6 +444,13 @@ public:
 class CTxMemPool
 {
 private:
+    std::set<std::shared_ptr<bitcoin::tx>> m_mff_pending_txs;
+    std::shared_ptr<bitcoin::mff> m_mff;
+    std::shared_ptr<bitcoin::tx> TxFromTx(const CTransaction& x);
+    std::shared_ptr<bitcoin::tx> TxFromEntry(const CTxMemPoolEntry& entry);
+    void DiscardEntry(const CTxMemPoolEntry& entry, uint8_t reason, const uint256* cause);
+    void TxRemove(const CTxMemPoolEntry& entry, MemPoolRemovalReason reason, const uint256* cause = nullptr);
+
     uint32_t nCheckFrequency GUARDED_BY(cs); //!< Value n means that n times in 2^32 we check.
     unsigned int nTransactionsUpdated; //!< Used by getblocktemplate to trigger CreateNewBlock() invocation
     CBlockPolicyEstimator* minerPolicyEstimator;
@@ -458,6 +467,7 @@ private:
     bool m_is_loaded GUARDED_BY(cs){false};
 
 public:
+    void ConfirmBlock(uint32_t height, const uint256& hash);
 
     static const int ROLLING_FEE_HALFLIFE = 60 * 60 * 12; // public only for testing
 
@@ -582,7 +592,7 @@ public:
     void addUnchecked(const CTxMemPoolEntry& entry, bool validFeeEstimate = true) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
     void addUnchecked(const CTxMemPoolEntry& entry, setEntries& setAncestors, bool validFeeEstimate = true) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
 
-    void removeRecursive(const CTransaction &tx, MemPoolRemovalReason reason = MemPoolRemovalReason::UNKNOWN);
+    void removeRecursive(const CTransaction &tx, MemPoolRemovalReason reason = MemPoolRemovalReason::UNKNOWN, const uint256* cause = nullptr);
     void removeForReorg(const CCoinsViewCache *pcoins, unsigned int nMemPoolHeight, int flags) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void removeConflicts(const CTransaction &tx) EXCLUSIVE_LOCKS_REQUIRED(cs);
     void removeForBlock(const std::vector<CTransactionRef>& vtx, unsigned int nBlockHeight);
@@ -621,7 +631,7 @@ public:
      *  Set updateDescendants to true when removing a tx that was in a block, so
      *  that any in-mempool descendants have their ancestor state updated.
      */
-    void RemoveStaged(setEntries &stage, bool updateDescendants, MemPoolRemovalReason reason = MemPoolRemovalReason::UNKNOWN) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void RemoveStaged(setEntries &stage, bool updateDescendants, MemPoolRemovalReason reason = MemPoolRemovalReason::UNKNOWN, const uint256* cause = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     /** When adding transactions from a disconnected block back to the mempool,
      *  new mempool entries may have children in the mempool (which is generally
@@ -743,7 +753,7 @@ private:
      *  transactions in a chain before we've updated all the state for the
      *  removal.
      */
-    void removeUnchecked(txiter entry, MemPoolRemovalReason reason = MemPoolRemovalReason::UNKNOWN) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    void removeUnchecked(txiter entry, MemPoolRemovalReason reason = MemPoolRemovalReason::UNKNOWN, const uint256* cause = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs);
 };
 
 /**

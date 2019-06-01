@@ -18,6 +18,92 @@
 #include <util/system.h>
 #include <util/moneystr.h>
 #include <util/time.h>
+#include <bcq/bitcoin.h>
+
+void CTxMemPool::ConfirmBlock(uint32_t height, const uint256& hash) {
+    if (!m_mff.get()) return;
+    m_mff->confirm_block(GetTime(), height, hash, m_mff_pending_txs);
+    m_mff_pending_txs.clear();
+}
+
+std::shared_ptr<bitcoin::tx> CTxMemPool::TxFromEntry(const CTxMemPoolEntry& entry) {
+    auto x = entry.GetTx();
+    auto rv = m_mff.get() ? m_mff->tretch(x.GetHash()) : nullptr;
+    if (rv) return rv;
+    rv = std::make_shared<bitcoin::tx>();
+    rv->m_fee = entry.GetFee();
+    rv->m_hash = x.GetHash();
+    rv->m_weight = entry.GetTxWeight();
+    auto& vin = rv->m_vin;
+    for (auto& i : x.vin) {
+        vin.emplace_back(i.prevout.n, i.prevout.hash);
+    }
+    auto& vout = rv->m_vout;
+    for (auto& o : x.vout) {
+        vout.emplace_back(o.nValue);
+    }
+    return rv;
+}
+
+std::shared_ptr<bitcoin::tx> CTxMemPool::TxFromTx(const CTransaction& x) {
+    auto rv = m_mff.get() ? m_mff->tretch(x.GetHash()) : nullptr;
+    if (rv) return rv;
+    rv = std::make_shared<bitcoin::tx>();
+    rv->m_hash = x.GetHash();
+    rv->m_weight = GetTransactionWeight(x);
+    auto& vin = rv->m_vin;
+    for (auto& i : x.vin) {
+        vin.emplace_back(i.prevout.n, i.prevout.hash);
+    }
+    auto& vout = rv->m_vout;
+    for (auto& o : x.vout) {
+        vout.emplace_back(o.nValue);
+    }
+    return rv;
+}
+
+void CTxMemPool::DiscardEntry(const CTxMemPoolEntry& entry, uint8_t reason, const uint256* cause) {
+    if (!m_mff.get()) return;
+    std::vector<unsigned char> vec;
+    CVectorWriter s(0, 0, vec, 0);
+    const auto& tref = entry.GetTx();
+    tref.Serialize(s);
+    auto ex = TxFromEntry(entry);
+    m_mff->tx_discarded(GetTime(), ex, vec, reason, cause ? m_mff->tretch(*cause) : nullptr);
+}
+
+void CTxMemPool::TxRemove(const CTxMemPoolEntry& entry, MemPoolRemovalReason reason, const uint256* cause) {
+    if (!m_mff.get()) return;
+    // do we know this transaction?
+    const auto& tref = entry.GetTx();
+    auto hash = tref.GetHash();
+    bool known = m_mff->m_references.count(hash);
+    switch (reason) {
+    case MemPoolRemovalReason::EXPIRY:
+        if (known) m_mff->tx_left(GetTime(), m_mff->tretch(hash), bitcoin::mff::reason_expired, cause ? m_mff->tretch(*cause) : nullptr);
+        return;
+    case MemPoolRemovalReason::SIZELIMIT:
+        if (known) m_mff->tx_left(GetTime(), m_mff->tretch(hash), bitcoin::mff::reason_sizelimit, cause ? m_mff->tretch(*cause) : nullptr);
+        return;
+    case MemPoolRemovalReason::REORG:
+        if (known) m_mff->tx_left(GetTime(), m_mff->tretch(hash), bitcoin::mff::reason_reorg, cause ? m_mff->tretch(*cause) : nullptr);
+        return;
+    case MemPoolRemovalReason::BLOCK:
+        m_mff_pending_txs.insert(TxFromEntry(entry));
+        return;
+    case MemPoolRemovalReason::CONFLICT:  //! Removed for conflict with in-block transaction
+        return DiscardEntry(entry, bitcoin::mff::reason_conflict, cause);
+    case MemPoolRemovalReason::REPLACED:  //! Removed for replacement
+        return DiscardEntry(entry, bitcoin::mff::reason_replaced, cause);
+    case MemPoolRemovalReason::UNKNOWN:   //! Manually removed or unknown reason
+    default:
+        // If there is a cause, we use invalid, otherwise out
+        if (cause) {
+            return DiscardEntry(entry, bitcoin::mff::reason_unknown, cause);
+        }
+        return m_mff->tx_left(GetTime(), m_mff->tretch(hash), bitcoin::mff::reason_unknown, nullptr);
+    }
+}
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransactionRef& _tx, const CAmount& _nFee,
                                  int64_t _nTime, unsigned int _entryHeight,
@@ -402,9 +488,11 @@ void CTxMemPool::addUnchecked(const CTxMemPoolEntry &entry, setEntries &setAnces
 
     vTxHashes.emplace_back(tx.GetWitnessHash(), newit);
     newit->vTxHashesIdx = vTxHashes.size() - 1;
+
+    if (m_mff) m_mff->tx_entered(GetTime(), TxFromEntry(entry));
 }
 
-void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
+void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason, const uint256* cause)
 {
     NotifyEntryRemoved(it->GetSharedTx(), reason);
     const uint256 hash = it->GetTx().GetHash();
@@ -419,6 +507,8 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
             vTxHashes.shrink_to_fit();
     } else
         vTxHashes.clear();
+
+    TxRemove(*it, reason, cause);
 
     totalTxSize -= it->GetTxSize();
     cachedInnerUsage -= it->DynamicMemoryUsage();
@@ -458,7 +548,7 @@ void CTxMemPool::CalculateDescendants(txiter entryit, setEntries& setDescendants
     }
 }
 
-void CTxMemPool::removeRecursive(const CTransaction &origTx, MemPoolRemovalReason reason)
+void CTxMemPool::removeRecursive(const CTransaction &origTx, MemPoolRemovalReason reason, const uint256* cause)
 {
     // Remove transaction from memory pool
     {
@@ -486,7 +576,7 @@ void CTxMemPool::removeRecursive(const CTransaction &origTx, MemPoolRemovalReaso
             CalculateDescendants(it, setAllRemoves);
         }
 
-        RemoveStaged(setAllRemoves, false, reason);
+        RemoveStaged(setAllRemoves, false, reason, cause);
     }
 }
 
@@ -531,6 +621,7 @@ void CTxMemPool::removeConflicts(const CTransaction &tx)
 {
     // Remove transactions which depend on inputs of tx, recursively
     AssertLockHeld(cs);
+    uint256 cause = tx.GetHash();
     for (const CTxIn &txin : tx.vin) {
         auto it = mapNextTx.find(txin.prevout);
         if (it != mapNextTx.end()) {
@@ -538,7 +629,7 @@ void CTxMemPool::removeConflicts(const CTransaction &tx)
             if (txConflict != tx)
             {
                 ClearPrioritisation(txConflict.GetHash());
-                removeRecursive(txConflict, MemPoolRemovalReason::CONFLICT);
+                removeRecursive(txConflict, MemPoolRemovalReason::CONFLICT, &cause);
             }
         }
     }
@@ -568,6 +659,9 @@ void CTxMemPool::removeForBlock(const std::vector<CTransactionRef>& vtx, unsigne
             setEntries stage;
             stage.insert(it);
             RemoveStaged(stage, true, MemPoolRemovalReason::BLOCK);
+        } else if (m_mff) {
+            // tag for MFF
+            m_mff_pending_txs.insert(TxFromTx(*tx));
         }
         removeConflicts(*tx);
         ClearPrioritisation(tx->GetHash());
@@ -915,11 +1009,11 @@ size_t CTxMemPool::DynamicMemoryUsage() const {
     return memusage::MallocUsage(sizeof(CTxMemPoolEntry) + 12 * sizeof(void*)) * mapTx.size() + memusage::DynamicUsage(mapNextTx) + memusage::DynamicUsage(mapDeltas) + memusage::DynamicUsage(mapLinks) + memusage::DynamicUsage(vTxHashes) + cachedInnerUsage;
 }
 
-void CTxMemPool::RemoveStaged(setEntries &stage, bool updateDescendants, MemPoolRemovalReason reason) {
+void CTxMemPool::RemoveStaged(setEntries &stage, bool updateDescendants, MemPoolRemovalReason reason, const uint256* cause) {
     AssertLockHeld(cs);
     UpdateForRemoveFromMempool(stage, updateDescendants);
     for (txiter it : stage) {
-        removeUnchecked(it, reason);
+        removeUnchecked(it, reason, cause);
     }
 }
 
@@ -1101,6 +1195,10 @@ void CTxMemPool::SetIsLoaded(bool loaded)
 {
     LOCK(cs);
     m_is_loaded = loaded;
+    if (loaded) {
+        m_mff = std::make_shared<bitcoin::mff>((GetDataDir() / "mff").string());
+        m_mff->load();
+    }
 }
 
 SaltedTxidHasher::SaltedTxidHasher() : k0(GetRand(std::numeric_limits<uint64_t>::max())), k1(GetRand(std::numeric_limits<uint64_t>::max())) {}
