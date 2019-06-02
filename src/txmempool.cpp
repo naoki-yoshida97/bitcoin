@@ -20,6 +20,13 @@
 #include <util/time.h>
 #include <bcq/bitcoin.h>
 
+void CTxMemPool::WillShutdown() {
+    LOCK(cs);
+    if (m_mff.get()) {
+        m_mff->flush();
+    }
+}
+
 void CTxMemPool::ConfirmBlock(uint32_t height, const uint256& hash) {
     if (!m_mff.get()) return;
     m_mff->confirm_block(GetTime(), height, hash, m_mff_pending_txs);

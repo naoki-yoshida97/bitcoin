@@ -468,6 +468,7 @@ private:
 
 public:
     void ConfirmBlock(uint32_t height, const uint256& hash);
+    void WillShutdown();
 
     static const int ROLLING_FEE_HALFLIFE = 60 * 60 * 12; // public only for testing
 

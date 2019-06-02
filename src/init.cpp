@@ -241,8 +241,11 @@ void Shutdown(InitInterfaces& interfaces)
     g_txindex.reset();
     DestroyAllBlockFilterIndexes();
 
-    if (::mempool.IsLoaded() && gArgs.GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
-        DumpMempool(::mempool);
+    if (::mempool.IsLoaded()) {
+        ::mempool.WillShutdown();
+        if (gArgs.GetArg("-persistmempool", DEFAULT_PERSIST_MEMPOOL)) {
+            DumpMempool(::mempool);
+        }
     }
 
     if (fFeeEstimatesInitialized)
