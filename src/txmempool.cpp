@@ -30,7 +30,7 @@ std::shared_ptr<bitcoin::tx> CTxMemPool::TxFromEntry(const CTxMemPoolEntry& entr
     auto x = entry.GetTx();
     auto rv = m_mff.get() ? m_mff->tretch(x.GetHash()) : nullptr;
     if (rv) return rv;
-    rv = std::make_shared<bitcoin::tx>();
+    rv = std::make_shared<bitcoin::tx>(m_mff.get());
     rv->m_fee = entry.GetFee();
     rv->m_hash = x.GetHash();
     rv->m_weight = entry.GetTxWeight();
@@ -48,7 +48,7 @@ std::shared_ptr<bitcoin::tx> CTxMemPool::TxFromEntry(const CTxMemPoolEntry& entr
 std::shared_ptr<bitcoin::tx> CTxMemPool::TxFromTx(const CTransaction& x) {
     auto rv = m_mff.get() ? m_mff->tretch(x.GetHash()) : nullptr;
     if (rv) return rv;
-    rv = std::make_shared<bitcoin::tx>();
+    rv = std::make_shared<bitcoin::tx>(m_mff.get());
     rv->m_hash = x.GetHash();
     rv->m_weight = GetTransactionWeight(x);
     auto& vin = rv->m_vin;
