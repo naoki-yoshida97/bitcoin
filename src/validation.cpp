@@ -2560,6 +2560,7 @@ bool CChainState::ActivateBestChainStep(CValidationState& state, const CChainPar
     bool fBlocksDisconnected = false;
     DisconnectedBlockTransactions disconnectpool;
     while (m_chain.Tip() && m_chain.Tip() != pindexFork) {
+        mempool.UnconfirmBlock(m_chain.Tip()->nHeight);
         if (!DisconnectTip(state, chainparams, &disconnectpool)) {
             // This is likely a fatal error, but keep the mempool consistent,
             // just in case. Only remove from the mempool in this case.

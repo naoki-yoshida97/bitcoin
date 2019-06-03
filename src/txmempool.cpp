@@ -33,6 +33,11 @@ void CTxMemPool::ConfirmBlock(uint32_t height, const uint256& hash) {
     m_mff_pending_txs.clear();
 }
 
+void CTxMemPool::UnconfirmBlock(uint32_t height) {
+    if (!m_mff.get()) return;
+    while (m_mff->m_chain.m_tip >= height) m_mff->unconfirm_tip(GetTime());
+}
+
 std::shared_ptr<bitcoin::tx> CTxMemPool::TxFromEntry(const CTxMemPoolEntry& entry) {
     auto x = entry.GetTx();
     auto rv = m_mff.get() ? m_mff->tretch(x.GetHash()) : nullptr;
