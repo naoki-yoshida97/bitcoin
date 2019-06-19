@@ -228,6 +228,8 @@ struct RPCExamples {
     std::string ToDescriptionString() const;
 };
 
+class JSONRPCRequest;
+
 class RPCHelpMan
 {
 public:

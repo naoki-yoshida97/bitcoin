@@ -17,6 +17,8 @@
 
 #include <univalue.h>
 
+#include <rpc/util.h>
+
 static const unsigned int DEFAULT_RPC_SERIALIZE_VERSION = 1;
 
 class CRPCCommand;
@@ -40,6 +42,9 @@ public:
 
     JSONRPCRequest() : id(NullUniValue), params(NullUniValue), fHelp(false) {}
     void parse(const UniValue& valRequest);
+    inline void check(const RPCHelpMan& help) const {
+        if (fHelp || !help.IsValidNumArgs(params.size())) throw std::runtime_error(help.ToString());
+    }
 };
 
 /** Query whether RPC is running */
