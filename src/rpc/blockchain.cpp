@@ -846,7 +846,7 @@ static CBlockUndo GetUndoChecked(const CBlockIndex* pblockindex)
 
 static UniValue getblock(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"getblock",
+    request.check(RPCHelpMan{"getblock",
                 "\nIf verbosity is 0, returns a string that is serialized, hex-encoded data for block 'hash'.\n"
                 "If verbosity is 1, returns an Object with information about block <hash>.\n"
                 "If verbosity is 2, returns an Object with information about block <hash> and information about each transaction. \n",
@@ -898,11 +898,7 @@ static UniValue getblock(const JSONRPCRequest& request)
                     HelpExampleCli("getblock", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
             + HelpExampleRpc("getblock", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     uint256 hash(ParseHashV(request.params[0], "blockhash"));
 
@@ -1818,7 +1814,7 @@ static constexpr size_t PER_UTXO_OVERHEAD = sizeof(COutPoint) + sizeof(uint32_t)
 
 static UniValue getblockstats(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"getblockstats",
+    request.check(RPCHelpMan{"getblockstats",
                 "\nCompute per block statistics for a given window. All amounts are in satoshis.\n"
                 "It won't work for some heights with pruning.\n",
                 {
@@ -1873,10 +1869,7 @@ static UniValue getblockstats(const JSONRPCRequest& request)
                     HelpExampleCli("getblockstats", "1000 '[\"minfeerate\",\"avgfeerate\"]'")
             + HelpExampleRpc("getblockstats", "1000 '[\"minfeerate\",\"avgfeerate\"]'")
                 },
-    };
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     LOCK(cs_main);
 

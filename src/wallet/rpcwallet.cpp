@@ -825,7 +825,7 @@ static UniValue sendmany(const JSONRPCRequest& request)
         return NullUniValue;
     }
 
-    const RPCHelpMan help{"sendmany",
+    request.check(RPCHelpMan{"sendmany",
                 "\nSend multiple times. Amounts are double-precision floating point numbers." +
                     HelpRequiringPassphrase(pwallet) + "\n",
                 {
@@ -866,11 +866,7 @@ static UniValue sendmany(const JSONRPCRequest& request)
             "\nAs a JSON-RPC call\n"
             + HelpExampleRpc("sendmany", "\"\", {\"1D1ZrZNe3JUo7ZycKEYQQiQAWd9y54F4XX\":0.01,\"1353tsE8YMTA4EuV7dgUXGjNFf9KpVvKHz\":0.02}, 6, \"testing\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
@@ -2399,7 +2395,7 @@ static UniValue getbalances(const JSONRPCRequest& request)
     }
     CWallet& wallet = *rpc_wallet;
 
-    const RPCHelpMan help{
+    request.check(RPCHelpMan{
         "getbalances",
         "Returns an object with all balances in " + CURRENCY_UNIT + ".\n",
         {},
@@ -2419,11 +2415,7 @@ static UniValue getbalances(const JSONRPCRequest& request)
         RPCExamples{
             HelpExampleCli("getbalances", "") +
             HelpExampleRpc("getbalances", "")},
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
@@ -2462,7 +2454,7 @@ static UniValue getwalletinfo(const JSONRPCRequest& request)
         return NullUniValue;
     }
 
-    const RPCHelpMan help{"getwalletinfo",
+    request.check(RPCHelpMan{"getwalletinfo",
                 "Returns an object containing various wallet state info.\n",
                 {},
                 RPCResult{
@@ -2492,11 +2484,7 @@ static UniValue getwalletinfo(const JSONRPCRequest& request)
                     HelpExampleCli("getwalletinfo", "")
             + HelpExampleRpc("getwalletinfo", "")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
@@ -2730,7 +2718,7 @@ static UniValue setwalletflag(const JSONRPCRequest& request)
 
 static UniValue createwallet(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{
+    request.check(RPCHelpMan{
         "createwallet",
         "\nCreates and loads a new wallet.\n",
         {
@@ -2750,11 +2738,8 @@ static UniValue createwallet(const JSONRPCRequest& request)
             HelpExampleCli("createwallet", "\"testwallet\"")
             + HelpExampleRpc("createwallet", "\"testwallet\"")
         },
-    };
+    });
 
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
     std::string error;
     std::string warning;
 
@@ -3211,7 +3196,7 @@ static UniValue fundrawtransaction(const JSONRPCRequest& request)
         return NullUniValue;
     }
 
-    const RPCHelpMan help{"fundrawtransaction",
+    request.check(RPCHelpMan{"fundrawtransaction",
                 "\nAdd inputs to a transaction until it has enough in value to meet its out value.\n"
                 "This will not modify existing inputs, and will add at most one change output to the outputs.\n"
                 "No existing outputs will be modified unless \"subtractFeeFromOutputs\" is specified.\n"
@@ -3275,11 +3260,7 @@ static UniValue fundrawtransaction(const JSONRPCRequest& request)
                             "\nSend the transaction\n"
                             + HelpExampleCli("sendrawtransaction", "\"signedtransactionhex\"")
                                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     RPCTypeCheck(request.params, {UniValue::VSTR, UniValueType(), UniValue::VBOOL});
 

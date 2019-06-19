@@ -71,7 +71,7 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
 
 static UniValue getrawtransaction(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{
+    request.check(RPCHelpMan{
                 "getrawtransaction",
                 "\nReturn the raw transaction data.\n"
 
@@ -149,11 +149,7 @@ static UniValue getrawtransaction(const JSONRPCRequest& request)
             + HelpExampleCli("getrawtransaction", "\"mytxid\" false \"myblockhash\"")
             + HelpExampleCli("getrawtransaction", "\"mytxid\" true \"myblockhash\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     bool in_active_chain = true;
     uint256 hash = ParseHashV(request.params[0], "parameter 1");
@@ -426,7 +422,7 @@ static UniValue createrawtransaction(const JSONRPCRequest& request)
 
 static UniValue decoderawtransaction(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"decoderawtransaction",
+    request.check(RPCHelpMan{"decoderawtransaction",
                 "\nReturn a JSON object representing the serialized, hex-encoded transaction.\n",
                 {
                     {"hexstring", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction hex string"},
@@ -483,11 +479,7 @@ static UniValue decoderawtransaction(const JSONRPCRequest& request)
                     HelpExampleCli("decoderawtransaction", "\"hexstring\"")
             + HelpExampleRpc("decoderawtransaction", "\"hexstring\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VBOOL});
 
@@ -518,7 +510,7 @@ static std::string GetAllOutputTypes()
 
 static UniValue decodescript(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"decodescript",
+    request.check(RPCHelpMan{"decodescript",
                 "\nDecode a hex-encoded script.\n",
                 {
                     {"hexstring", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "the hex-encoded script"},
@@ -549,11 +541,7 @@ static UniValue decodescript(const JSONRPCRequest& request)
                     HelpExampleCli("decodescript", "\"hexstring\"")
             + HelpExampleRpc("decodescript", "\"hexstring\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     RPCTypeCheck(request.params, {UniValue::VSTR});
 
@@ -784,7 +772,7 @@ static UniValue signrawtransactionwithkey(const JSONRPCRequest& request)
 
 static UniValue sendrawtransaction(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"sendrawtransaction",
+    request.check(RPCHelpMan{"sendrawtransaction",
                 "\nSubmits raw transaction (serialized, hex-encoded) to local node and network.\n"
                 "\nAlso see createrawtransaction and signrawtransactionwithkey calls.\n",
                 {
@@ -806,11 +794,7 @@ static UniValue sendrawtransaction(const JSONRPCRequest& request)
             "\nAs a JSON-RPC call\n"
             + HelpExampleRpc("sendrawtransaction", "\"signedhex\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     RPCTypeCheck(request.params, {
         UniValue::VSTR,
@@ -848,7 +832,7 @@ static UniValue sendrawtransaction(const JSONRPCRequest& request)
 
 static UniValue testmempoolaccept(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"testmempoolaccept",
+    request.check(RPCHelpMan{"testmempoolaccept",
                 "\nReturns result of mempool acceptance tests indicating if raw transaction (serialized, hex-encoded) would be accepted by mempool.\n"
                 "\nThis checks if the transaction violates the consensus or policy rules.\n"
                 "\nSee sendrawtransaction call.\n",
@@ -881,11 +865,7 @@ static UniValue testmempoolaccept(const JSONRPCRequest& request)
             "\nAs a JSON-RPC call\n"
             + HelpExampleRpc("testmempoolaccept", "[\"signedhex\"]")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     RPCTypeCheck(request.params, {
         UniValue::VARR,
@@ -1424,7 +1404,7 @@ UniValue createpsbt(const JSONRPCRequest& request)
 
 UniValue converttopsbt(const JSONRPCRequest& request)
 {
-    const RPCHelpMan help{"converttopsbt",
+    request.check(RPCHelpMan{"converttopsbt",
                 "\nConverts a network serialized transaction to a PSBT. This should be used only with createrawtransaction and fundrawtransaction\n"
                 "createpsbt and walletcreatefundedpsbt should be used for new applications.\n",
                 {
@@ -1448,11 +1428,7 @@ UniValue converttopsbt(const JSONRPCRequest& request)
                             "\nConvert the transaction to a PSBT\n"
                             + HelpExampleCli("converttopsbt", "\"rawtransaction\"")
                 },
-    };
-
-    if (request.fHelp || !help.IsValidNumArgs(request.params.size())) {
-        throw std::runtime_error(help.ToString());
-    }
+    });
 
     RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VBOOL, UniValue::VBOOL}, true);
 
