@@ -9,28 +9,21 @@ export LC_ALL=C
 # Get coins from Signet Faucet
 #
 
-if [ $# -lt 1 ]; then
-    >&2 echo "syntax: $0 <bitcoin-cli path> [--faucet=<faucet URL>=https://signet.bc-2.jp/claim] [<bitcoin-cli args>]"
-    exit 1
-fi
+faucet="https://signet.bc-2.jp/claim"
 
-bcli=$1
-shift
+VARCHECKS='
+        if [ "$varname" = "cmd" ]; then
+            bcli=$value;
+        elif [ "$varname" = "faucet" ]; then
+            faucet=$value;
+    '
+HELPSTRING="syntax: $0 [--help] [--cmd=<bitcoin-cli path>] [--faucet=<faucet URL>=https://signet.bc-2.jp/claim] [--] [<bitcoin-cli args>]"
 
-if [ "${1:0:9}" = "--faucet" ]; then
-    faucet=${1:10}
-    shift
-else
-    faucet="https://signet.bc-2.jp/claim"
-fi
-
-if ! [ -e "$bcli" ]; then
-    command -v "$bcli" >/dev/null 2>&1 || { echo >&2 "error: unable to find bitcoin binary: $bcli"; exit 1; }
-fi
+source $(dirname $0)/args.sh "$@"
 
 # get address for receiving coins
-addr=$($bcli "$@" getnewaddress) || exit 1
+addr=$($bcli $args getnewaddress) || { echo >&2 "for help, type: $0 --help"; exit 1; }
 
-command -v "curl" \
+command -v "curl" > /dev/null \
 && curl -X POST -d "address=$addr" $faucet \
 || wget --post-data "address=$addr" $faucet

@@ -11,8 +11,11 @@ export LC_ALL=C
 # is generated from an external source (i.e. the primary issuer is back online)
 #
 
+HELPSTRING="syntax: $0 <trigger time> <idle time> [--cmd=<bitcoin-cli path>] [<bitcoin-cli args>]"
+
 if [ $# -lt 3 ]; then
-    echo "syntax: $0 <trigger time> <idle time> <bitcoin-cli path> [<bitcoin-cli args>]" ; exit 1
+    echo $HELPSTRING
+    exit 1
 fi
 
 function log()
@@ -26,18 +29,20 @@ shift
 idletime=$1
 shift
 
-bcli=$1
-shift
-
-if ! [ -e "$bcli" ]; then
-    command -v "$bcli" >/dev/null 2>&1 || { echo >&2 "error: unable to find bitcoin binary: $bcli"; exit 1; }
-fi
+source $(dirname $0)/args.sh "$@"
 
 echo "- checking node status"
-conns=$($bcli "$@" getconnectioncount) || { echo >&2 "node error"; exit 1; }
+conns=$($bcli $args getconnectioncount) || { echo >&2 "node error"; exit 1; }
 
 if [ $conns -lt 1 ]; then
     echo "warning: node is not connected to any other node"
+fi
+
+MKBLOCK=$(dirname $0)/mkblock.sh
+
+if [ ! -e "$MKBLOCK" ]; then
+    >&2 echo "error: cannot locate mkblock.sh (expected to find in $MKBLOCK"
+    exit 1
 fi
 
 log "node OK with $conns connection(s)"
@@ -46,17 +51,17 @@ log "hit ^C to stop"
 # outer loop alternates between watching and mining
 while true; do
     # inner watchdog loop
-    blocks=$($bcli "$@" getblockcount)
+    blocks=$($bcli $args getblockcount)
     log "last block #$blocks; waiting up to $triggertime seconds for a new block"
     remtime=$triggertime
     while true; do
         waittime=1800
         if [ $waittime -gt $remtime ]; then waittime=$remtime; fi
-        conns=$($bcli "$@" getconnectioncount)
+        conns=$($bcli $args getconnectioncount)
         if [ $conns -eq 1 ]; then s=""; else s="s"; fi
         log "waiting $waittime/$remtime seconds with $conns peer$s"
         sleep $waittime
-        new_blocks=$($bcli "$@" getblockcount)
+        new_blocks=$($bcli $args getblockcount)
         if [ $new_blocks -gt $blocks ]; then
             log "detected block count increase $blocks -> $new_blocks; resetting timer"
             remtime=$triggertime
@@ -70,11 +75,11 @@ while true; do
     # inner issuer loop
     while true; do
         log "generating next block"
-        blockhash=$(./mkblock.sh "$bcli" "$2") || { echo "node error; aborting" ; exit 1; }
-        blocks=$($bcli "$@" getblockcount)
-        log "mined block $new_blocks $blockhash to $($bcli "$@" getconnectioncount) peer(s); idling for $idletime seconds"
+        blockhash=$("$MKBLOCK" "$bcli" "$2") || { echo "node error; aborting" ; exit 1; }
+        blocks=$($bcli $args getblockcount)
+        log "mined block $new_blocks $blockhash to $($bcli $args getconnectioncount) peer(s); idling for $idletime seconds"
         sleep $idletime
-        new_blocks=$($bcli "$@" getblockcount)
+        new_blocks=$($bcli $args getblockcount)
         if [ $blocks -lt $new_blocks ]; then
             log "primary issuer appears to be back online ($blocks -> $new_blocks blocks during downtime); going back to watching"
             break
