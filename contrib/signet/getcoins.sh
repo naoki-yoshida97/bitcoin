@@ -26,4 +26,6 @@ addr=$($bcli $args getnewaddress) || { echo >&2 "for help, type: $0 --help"; exi
 
 command -v "curl" > /dev/null \
 && curl -X POST -d "address=$addr" $faucet \
-|| wget --post-data "address=$addr" $faucet
+|| wget -qO - --post-data "address=$addr" $faucet
+
+echo
