@@ -31,4 +31,6 @@ fi
 # get address for receiving coins
 addr=$($bcli "$@" getnewaddress) || exit 1
 
-curl -X POST -d "address=$addr" $faucet
+command -v "curl" \
+&& curl -X POST -d "address=$addr" $faucet \
+|| wget --post-data "address=$addr" $faucet
