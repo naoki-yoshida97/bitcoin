@@ -4,7 +4,7 @@
 
 #include <script/proof.h>
 
-#include <util/validation.h> // For strMessageMagic
+const std::string strMessageMagic = "Bitcoin Signed Message:\n";
 
 namespace proof
 {
