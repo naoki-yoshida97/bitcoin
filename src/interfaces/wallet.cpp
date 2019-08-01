@@ -12,6 +12,7 @@
 #include <policy/fees.h>
 #include <primitives/transaction.h>
 #include <script/standard.h>
+#include <script/proof.h>
 #include <support/allocators/secure.h>
 #include <sync.h>
 #include <ui_interface.h>
@@ -455,6 +456,10 @@ public:
     void remove() override
     {
         RemoveWallet(m_wallet);
+    }
+    void signMessage(const std::string& message, const CTxDestination& destination, std::vector<uint8_t>& signature_out) override
+    {
+        proof::SignMessageWithSigningProvider(m_wallet.get(), message, destination, signature_out);
     }
     std::unique_ptr<Handler> handleUnload(UnloadFn fn) override
     {
