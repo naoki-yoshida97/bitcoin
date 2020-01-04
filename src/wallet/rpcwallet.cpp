@@ -4189,7 +4189,7 @@ void SignBlockWithWallet(CBlock& block, CWallet* const pwallet)
     CScript blockscript(g_signet_blockscript.begin(), g_signet_blockscript.end());
 
     SignatureData solution(solution_in);
-    bool res = ProduceSignature(*pwallet->GetSigningProvider(blockscript), SimpleSignatureCreator(signet_hash), blockscript, solution);
+    bool res = ProduceSignature(*pwallet, SimpleSignatureCreator(signet_hash), blockscript, solution);
     if (!res) {
         throw JSONRPCError(RPC_VERIFY_ERROR, "could not produce a signature -- do you have the private key(s)?");
     }

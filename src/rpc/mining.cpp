@@ -996,9 +996,7 @@ UniValue getnewblockhex(const JSONRPCRequest& request)
         util::insert(coinbase_script, ParseHexV(str, "coinbase_script"));
     }
 
-    const CTxMemPool& mempool = EnsureMemPool();
-
-    auto block = BlockAssembler(mempool, Params()).CreateNewBlock(coinbase_script)->block;
+    auto block = BlockAssembler(Params()).CreateNewBlock(coinbase_script)->block;
     unsigned int extra_nonce = 0;
     // we bump stuff to bop stuff, or merkle root will be 0, etc etc etc etc
     {
