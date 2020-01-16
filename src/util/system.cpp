@@ -962,7 +962,32 @@ int RaiseFileDescriptorLimit(int nMinFD) {
  * this function tries to make a particular range of a file allocated (corresponding to disk space)
  * it is advisory, and the range specified in the arguments will never contain live data
  */
-void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length) {
+void AllocateFileRange(const std::string& prefix, FILE *file, unsigned int offset, unsigned int length) {
+    long pos = ftell(file);
+    fseek(file, 0L, SEEK_END);
+    long filesize = ftell(file);
+    fseek(file, pos, SEEK_SET);
+    static std::map<std::string, std::vector<size_t>>* statistics = new std::map<std::string, std::vector<size_t>>();
+    std::vector<size_t>& V = (*statistics)[prefix];
+    bool print = false;
+    if (V.size() == 0) { print = true; V.resize(4); }
+    #define v V
+    #define allocations v[0]
+    #define overused v[1]
+    #define underused v[2]
+    #define total_allocs v[3]
+    ++allocations;
+    total_allocs += length;
+    if (offset < filesize) overused += filesize - offset;
+    if (offset > filesize) underused += offset - filesize;
+    if (print) {
+        fprintf(stderr, "=== ALLOCATION STATS ===\n");
+        #undef v
+        #define v w.second
+        for (const auto& w : *statistics) {
+            fprintf(stderr, "%s \t %zu allocations; %zu over, %zu under => %.1f over/alloc, %.1f under/alloc\n", w.first.c_str(), allocations, overused, underused, float(overused)/allocations, float(underused)/allocations);
+        }
+    }
 #if defined(WIN32)
     // Windows-specific version
     HANDLE hFile = (HANDLE)_get_osfhandle(_fileno(file));
@@ -974,13 +999,12 @@ void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length) {
     SetEndOfFile(hFile);
 #elif defined(MAC_OSX)
     // OSX specific version
-    // NOTE: Contrary to other OS versions, the OSX version assumes that
-    // NOTE: offset is the size of the file.
     fstore_t fst;
     fst.fst_flags = F_ALLOCATECONTIG;
     fst.fst_posmode = F_PEOFPOSMODE;
     fst.fst_offset = 0;
-    fst.fst_length = length; // mac os fst_length takes the # of free bytes to allocate, not desired file size
+    // mac os fst_length takes the # of free bytes to allocate, not desired file size
+    fst.fst_length = length;
     fst.fst_bytesalloc = 0;
     if (fcntl(fileno(file), F_PREALLOCATE, &fst) == -1) {
         fst.fst_flags = F_ALLOCATEALL;

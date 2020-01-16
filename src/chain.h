@@ -39,16 +39,24 @@ static constexpr int64_t MAX_BLOCK_TIME_GAP = 90 * 60;
 
 class CBlockFileInfo
 {
-public:
-    unsigned int nBlocks;      //!< number of blocks stored in file
+private:
     unsigned int nSize;        //!< number of used bytes of block file
     unsigned int nUndoSize;    //!< number of used bytes in the undo file
+public:
+    unsigned int nBlocks;      //!< number of blocks stored in file
     unsigned int nHeightFirst; //!< lowest height of block in file
     unsigned int nHeightLast;  //!< highest height of block in file
     uint64_t nTimeFirst;       //!< earliest time of block in file
     uint64_t nTimeLast;        //!< latest time of block in file
 
     ADD_SERIALIZE_METHODS;
+
+    unsigned int GetSize() const        { return nSize; }
+    unsigned int GetUndoSize() const    { return nUndoSize; }
+    void SetSize(unsigned int size)     { nSize = size; }
+    void SetUndoSize(unsigned int size) { nUndoSize = size; }
+    void AddSize(unsigned int size)     { nSize += size; }
+    void AddUndoSize(unsigned int size) { nUndoSize += size; }
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {

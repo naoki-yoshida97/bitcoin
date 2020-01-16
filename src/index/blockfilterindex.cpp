@@ -196,7 +196,7 @@ size_t BlockFilterIndex::WriteFilterToDisk(FlatFilePos& pos, const BlockFilter& 
 
     // Pre-allocate sufficient space for filter data.
     bool out_of_space;
-    m_filter_fileseq->Allocate(pos, data_size, out_of_space);
+    m_filter_fileseq->Allocate(0, pos, data_size, out_of_space);
     if (out_of_space) {
         LogPrintf("%s: out of disk space\n", __func__);
         return 0;

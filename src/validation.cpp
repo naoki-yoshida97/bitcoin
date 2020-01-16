@@ -133,8 +133,33 @@ CTxMemPool mempool(&feeEstimator);
 namespace {
     CBlockIndex* pindexBestInvalid = nullptr;
 
+    size_t undo_space_added = 0;
+    size_t undo_times_added = 0;
+    size_t block_space_added = 0;
+    size_t block_times_added = 0;
     CCriticalSection cs_LastBlockFile;
     std::vector<CBlockFileInfo> vinfoBlockFile;
+    static inline void AddBlockFileInfo(size_t blockheight, size_t idx, bool block_file, size_t amount) {
+        static size_t highestheight = 0;
+        if (block_file) {
+            block_space_added += amount;
+            block_times_added++;
+            vinfoBlockFile[idx].AddSize(amount);
+        } else {
+            undo_space_added += amount;
+            undo_times_added++;
+            vinfoBlockFile[idx].AddUndoSize(amount);
+        }
+        if (highestheight < blockheight) {
+            if (highestheight / 50000 < blockheight / 50000) {
+                fprintf(stderr, "=== BLOCK FILE INFO STATS (blocks %zu .. %zu) ===\n", 50000 * (highestheight / 50000), 50000 * (blockheight / 50000));
+                fprintf(stderr, "BLOCKS: %zu additions, %zu total space, %.1f bytes/addition\n", block_times_added, block_space_added, float(block_space_added)/block_times_added);
+                fprintf(stderr, "REVS:   %zu additions, %zu total space, %.1f bytes/addition\n", undo_times_added, undo_space_added, float(undo_space_added)/undo_times_added);
+                undo_space_added = undo_times_added = block_space_added = block_times_added = 0;
+            }
+            highestheight = blockheight;
+        }
+    }
     int nLastBlockFile = 0;
     /** Global flag to indicate we should check to see if there are
      *  block/undo files that should be deleted.  Set on startup
@@ -1735,8 +1760,8 @@ void static FlushBlockFile(bool fFinalize = false)
 {
     LOCK(cs_LastBlockFile);
 
-    FlatFilePos block_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].nSize);
-    FlatFilePos undo_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].nUndoSize);
+    FlatFilePos block_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].GetSize());
+    FlatFilePos undo_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].GetUndoSize());
 
     bool status = true;
     status &= BlockFileSeq().Flush(block_pos_old, fFinalize);
@@ -3192,14 +3217,14 @@ static bool FindBlockPos(FlatFilePos &pos, unsigned int nAddSize, unsigned int n
     }
 
     if (!fKnown) {
-        while (vinfoBlockFile[nFile].nSize + nAddSize >= MAX_BLOCKFILE_SIZE) {
+        while (vinfoBlockFile[nFile].GetSize() + nAddSize >= MAX_BLOCKFILE_SIZE) {
             nFile++;
             if (vinfoBlockFile.size() <= nFile) {
                 vinfoBlockFile.resize(nFile + 1);
             }
         }
         pos.nFile = nFile;
-        pos.nPos = vinfoBlockFile[nFile].nSize;
+        pos.nPos = vinfoBlockFile[nFile].GetSize();
     }
 
     if ((int)nFile != nLastBlockFile) {
@@ -3211,14 +3236,16 @@ static bool FindBlockPos(FlatFilePos &pos, unsigned int nAddSize, unsigned int n
     }
 
     vinfoBlockFile[nFile].AddBlock(nHeight, nTime);
-    if (fKnown)
-        vinfoBlockFile[nFile].nSize = std::max(pos.nPos + nAddSize, vinfoBlockFile[nFile].nSize);
-    else
-        vinfoBlockFile[nFile].nSize += nAddSize;
+    if (fKnown) {
+        if (pos.nPos + nAddSize > vinfoBlockFile[nFile].GetSize()) AddBlockFileInfo(nHeight, nFile, true, pos.nPos + nAddSize - vinfoBlockFile[nFile].GetSize());
+        // vinfoBlockFile[nFile].GetSize() = std::max(pos.nPos + nAddSize, vinfoBlockFile[nFile].GetSize());
+    } else
+        AddBlockFileInfo(nHeight, nFile, true, nAddSize);
+        // vinfoBlockFile[nFile].GetSize() += nAddSize;
 
     if (!fKnown) {
         bool out_of_space;
-        size_t bytes_allocated = BlockFileSeq().Allocate(pos, nAddSize, out_of_space);
+        size_t bytes_allocated = BlockFileSeq().Allocate(nHeight, pos, nAddSize, out_of_space);
         if (out_of_space) {
             return AbortNode("Disk space is too low!", _("Error: Disk space is too low!").translated, CClientUIInterface::MSG_NOPREFIX);
         }
@@ -3237,12 +3264,12 @@ static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos
 
     LOCK(cs_LastBlockFile);
 
-    pos.nPos = vinfoBlockFile[nFile].nUndoSize;
-    vinfoBlockFile[nFile].nUndoSize += nAddSize;
+    pos.nPos = vinfoBlockFile[nFile].GetUndoSize();
+    AddBlockFileInfo(0, nFile, false, nAddSize);
     setDirtyFileInfo.insert(nFile);
 
     bool out_of_space;
-    size_t bytes_allocated = UndoFileSeq().Allocate(pos, nAddSize, out_of_space);
+    size_t bytes_allocated = UndoFileSeq().Allocate(0, pos, nAddSize, out_of_space);
     if (out_of_space) {
         return AbortNode(state, "Disk space is too low!", _("Error: Disk space is too low!").translated, CClientUIInterface::MSG_NOPREFIX);
     }
@@ -3830,7 +3857,7 @@ uint64_t CalculateCurrentUsage()
 
     uint64_t retval = 0;
     for (const CBlockFileInfo &file : vinfoBlockFile) {
-        retval += file.nSize + file.nUndoSize;
+        retval += file.GetSize() + file.GetUndoSize();
     }
     return retval;
 }
@@ -3893,7 +3920,7 @@ static void FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nManualPr
     unsigned int nLastBlockWeCanPrune = std::min((unsigned)nManualPruneHeight, ::ChainActive().Tip()->nHeight - MIN_BLOCKS_TO_KEEP);
     int count=0;
     for (int fileNumber = 0; fileNumber < nLastBlockFile; fileNumber++) {
-        if (vinfoBlockFile[fileNumber].nSize == 0 || vinfoBlockFile[fileNumber].nHeightLast > nLastBlockWeCanPrune)
+        if (vinfoBlockFile[fileNumber].GetSize() == 0 || vinfoBlockFile[fileNumber].nHeightLast > nLastBlockWeCanPrune)
             continue;
         PruneOneBlockFile(fileNumber);
         setFilesToPrune.insert(fileNumber);
@@ -3958,9 +3985,9 @@ static void FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPruneAfte
         }
 
         for (int fileNumber = 0; fileNumber < nLastBlockFile; fileNumber++) {
-            nBytesToPrune = vinfoBlockFile[fileNumber].nSize + vinfoBlockFile[fileNumber].nUndoSize;
+            nBytesToPrune = vinfoBlockFile[fileNumber].GetSize() + vinfoBlockFile[fileNumber].GetUndoSize();
 
-            if (vinfoBlockFile[fileNumber].nSize == 0)
+            if (vinfoBlockFile[fileNumber].GetSize() == 0)
                 continue;
 
             if (nCurrentUsage + nBuffer < nPruneTarget)  // are we below our target?

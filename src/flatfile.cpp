@@ -52,8 +52,10 @@ FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only)
     return file;
 }
 
-size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space)
+size_t FlatFileSeq::Allocate(int height, const FlatFilePos& pos, size_t add_size, bool& out_of_space)
 {
+    static int cached_height = 0;
+    if (!height) height = cached_height; else cached_height = height;
     out_of_space = false;
 
     unsigned int n_old_chunks = (pos.nPos + m_chunk_size - 1) / m_chunk_size;
@@ -67,7 +69,8 @@ size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_
             FILE *file = Open(pos);
             if (file) {
                 LogPrintf("Pre-allocating up to position 0x%x in %s%05u.dat\n", new_size, m_prefix, pos.nFile);
-                AllocateFileRange(file, pos.nPos, inc_size);
+                std::string hp = m_prefix + std::to_string(height / 50000);
+                AllocateFileRange(hp, file, pos.nPos, inc_size);
                 fclose(file);
                 return inc_size;
             }

@@ -81,7 +81,7 @@ public:
      * @param[out] out_of_space Whether the allocation failed due to insufficient disk space.
      * @return The number of bytes successfully allocated.
      */
-    size_t Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space);
+    size_t Allocate(int height, const FlatFilePos& pos, size_t add_size, bool& out_of_space);
 
     /**
      * Commit a file to disk, and optionally truncate off extra pre-allocated bytes if final.
