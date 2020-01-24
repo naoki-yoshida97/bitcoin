@@ -1731,6 +1731,14 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
     return fClean ? DISCONNECT_OK : DISCONNECT_UNCLEAN;
 }
 
+static void FlushUndoFile(int block_file, bool finalize = false)
+{
+    FlatFilePos undo_pos_old(block_file, vinfoBlockFile[block_file].nUndoSize);
+    if (!UndoFileSeq().Flush(undo_pos_old, finalize)) {
+        AbortNode("Flushing undo file to disk failed. This is likely the result of an I/O error.");
+    }
+}
+
 void static FlushBlockFile(bool fFinalize = false)
 {
     LOCK(cs_LastBlockFile);
@@ -1757,6 +1765,12 @@ static bool WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationSt
             return error("ConnectBlock(): FindUndoPos failed");
         if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev->GetBlockHash(), chainparams.MessageStart()))
             return AbortNode(state, "Failed to write undo data");
+        // rev files are written in block height order, whereas blk files are written as blocks come in (often out of order)
+        // we want to flush the rev (undo) file once we've written the last block, which is indicated by the last height
+        // in the block file info as below
+        if (_pos.nFile < nLastBlockFile && static_cast<uint32_t>(pindex->nHeight) == vinfoBlockFile[_pos.nFile].nHeightLast) {
+            FlushUndoFile(_pos.nFile, true);
+        }
 
         // update nUndoPos in block index
         pindex->nUndoPos = _pos.nPos;
