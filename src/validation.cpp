@@ -1739,19 +1739,15 @@ static void FlushUndoFile(int block_file, bool finalize = false)
     }
 }
 
-void static FlushBlockFile(bool fFinalize = false)
+static void FlushBlockFile(bool fFinalize = false)
 {
     LOCK(cs_LastBlockFile);
-
     FlatFilePos block_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].nSize);
-    FlatFilePos undo_pos_old(nLastBlockFile, vinfoBlockFile[nLastBlockFile].nUndoSize);
-
-    bool status = true;
-    status &= BlockFileSeq().Flush(block_pos_old, fFinalize);
-    status &= UndoFileSeq().Flush(undo_pos_old, fFinalize);
-    if (!status) {
+    if (!BlockFileSeq().Flush(block_pos_old, fFinalize)) {
         AbortNode("Flushing block file to disk failed. This is likely the result of an I/O error.");
     }
+    // the undo file is actually finalized at a later stage, but we do want to flush it along with the block file
+    if (!fFinalize) FlushUndoFile(nLastBlockFile);
 }
 
 static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos, unsigned int nAddSize);
