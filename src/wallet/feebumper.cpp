@@ -150,7 +150,7 @@ bool TransactionCanBeBumped(const CWallet& wallet, const uint256& txid)
     return res == feebumper::Result::OK;
 }
 
-Result CreateTotalBumpTransaction(const CWallet* wallet, const uint256& txid, const CCoinControl& coin_control, CAmount total_fee, std::vector<std::string>& errors,
+Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, const CCoinControl& coin_control, CAmount total_fee, std::vector<std::string>& errors,
                                   CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx)
 {
     new_fee = total_fee;

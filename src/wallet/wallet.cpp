@@ -1489,7 +1489,7 @@ bool CWallet::ImportScriptPubKeys(const std::string& label, const std::set<CScri
     return true;
 }
 
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, bool use_max_sig)
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wallet, bool use_max_sig)
 {
     std::vector<CTxOut> txouts;
     for (const CTxIn& input : tx.vin) {
@@ -1505,7 +1505,7 @@ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wall
 }
 
 // txouts needs to be in the order of tx.vin
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::vector<CTxOut>& txouts, bool use_max_sig)
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wallet, const std::vector<CTxOut>& txouts, bool use_max_sig)
 {
     CMutableTransaction txNew(tx);
     if (!wallet->DummySignTx(txNew, txouts, use_max_sig)) {
@@ -1514,7 +1514,7 @@ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wall
     return GetVirtualTransactionSize(CTransaction(txNew));
 }
 
-int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet* wallet, bool use_max_sig)
+int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet& wallet, bool use_max_sig)
 {
     CMutableTransaction txn;
     txn.vin.push_back(CTxIn(COutPoint()));

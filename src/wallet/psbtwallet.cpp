@@ -4,7 +4,7 @@
 
 #include <wallet/psbtwallet.h>
 
-TransactionError FillPSBT(const CWallet* pwallet, PartiallySignedTransaction& psbtx, bool& complete, int sighash_type, bool sign, bool bip32derivs)
+TransactionError FillPSBT(const CWallet& wallet, PartiallySignedTransaction& psbtx, bool& complete, int sighash_type, bool sign, bool bip32derivs)
 {
     LOCK(pwallet->cs_wallet);
     // Get all of the previous transactions
