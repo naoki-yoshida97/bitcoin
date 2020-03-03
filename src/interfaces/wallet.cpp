@@ -265,7 +265,7 @@ public:
         CMutableTransaction& mtx) override
     {
         if (total_fee > 0) {
-            return feebumper::CreateTotalBumpTransaction(m_wallet.get(), txid, coin_control, total_fee, errors, old_fee, new_fee, mtx) ==
+            return feebumper::CreateTotalBumpTransaction(*m_wallet.get(), txid, coin_control, total_fee, errors, old_fee, new_fee, mtx) ==
                 feebumper::Result::OK;
         } else {
             return feebumper::CreateRateBumpTransaction(*m_wallet.get(), txid, coin_control, errors, old_fee, new_fee, mtx) ==
@@ -363,7 +363,7 @@ public:
         bool sign = true,
         bool bip32derivs = false) override
     {
-        return FillPSBT(m_wallet.get(), psbtx, complete, sighash_type, sign, bip32derivs);
+        return FillPSBT(*m_wallet.get(), psbtx, complete, sighash_type, sign, bip32derivs);
     }
     WalletBalances getBalances() override
     {

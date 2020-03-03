@@ -1493,9 +1493,9 @@ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wall
 {
     std::vector<CTxOut> txouts;
     for (const CTxIn& input : tx.vin) {
-        const auto mi = wallet->mapWallet.find(input.prevout.hash);
+        const auto mi = wallet.mapWallet.find(input.prevout.hash);
         // Can not estimate size without knowing the input details
-        if (mi == wallet->mapWallet.end()) {
+        if (mi == wallet.mapWallet.end()) {
             return -1;
         }
         assert(input.prevout.n < mi->second.tx->vout.size());
@@ -1508,7 +1508,7 @@ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wall
 int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wallet, const std::vector<CTxOut>& txouts, bool use_max_sig)
 {
     CMutableTransaction txNew(tx);
-    if (!wallet->DummySignTx(txNew, txouts, use_max_sig)) {
+    if (!wallet.DummySignTx(txNew, txouts, use_max_sig)) {
         return -1;
     }
     return GetVirtualTransactionSize(CTransaction(txNew));
@@ -1518,7 +1518,7 @@ int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet& wallet, 
 {
     CMutableTransaction txn;
     txn.vin.push_back(CTxIn(COutPoint()));
-    if (!wallet->DummySignInput(txn.vin[0], txout, use_max_sig)) {
+    if (!wallet.DummySignInput(txn.vin[0], txout, use_max_sig)) {
         return -1;
     }
     return GetVirtualTransactionInputSize(txn.vin[0]);
@@ -2584,7 +2584,7 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
 {
     CAmount nValue = 0;
     const OutputType change_type = TransactionChangeType(coin_control.m_change_type ? *coin_control.m_change_type : m_default_change_type, vecSend);
-    ReserveDestination reservedest(this, change_type);
+    ReserveDestination reservedest(*this, change_type);
     int nChangePosRequest = nChangePosInOut;
     unsigned int nSubtractFeeFromAmount = 0;
     for (const auto& recipient : vecSend)
@@ -2725,7 +2725,7 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
                 if (pick_new_inputs) {
                     nValueIn = 0;
                     setCoins.clear();
-                    int change_spend_size = CalculateMaximumSignedInputSize(change_prototype_txout, this);
+                    int change_spend_size = CalculateMaximumSignedInputSize(change_prototype_txout, *this);
                     // If the wallet doesn't know how to sign change output, assume p2sh-p2wpkh
                     // as lower-bound to allow BnB to do it's thing
                     if (change_spend_size == -1) {
@@ -2790,7 +2790,7 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
                     txNew.vin.push_back(CTxIn(coin.outpoint,CScript()));
                 }
 
-                nBytes = CalculateMaximumSignedTxSize(CTransaction(txNew), this, coin_control.fAllowWatchOnly);
+                nBytes = CalculateMaximumSignedTxSize(CTransaction(txNew), *this, coin_control.fAllowWatchOnly);
                 if (nBytes < 0) {
                     strFailReason = _("Signing transaction failed").translated;
                     return false;
@@ -3167,7 +3167,7 @@ bool CWallet::GetNewChangeDestination(const OutputType type, CTxDestination& des
     LOCK(cs_wallet);
     error.clear();
 
-    ReserveDestination reservedest(this, type);
+    ReserveDestination reservedest(*this, type);
     if (!reservedest.GetReservedDestination(dest, true)) {
         error = "Error: Keypool ran out, please call keypoolrefill first";
         return false;
@@ -3351,7 +3351,7 @@ std::set<CTxDestination> CWallet::GetLabelAddresses(const std::string& label) co
 
 bool ReserveDestination::GetReservedDestination(CTxDestination& dest, bool internal)
 {
-    m_spk_man = pwallet->GetScriptPubKeyMan(type, internal);
+    m_spk_man = wallet.GetScriptPubKeyMan(type, internal);
     if (!m_spk_man) {
         return false;
     }

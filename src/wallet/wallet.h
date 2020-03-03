@@ -154,8 +154,8 @@ protected:
 
 public:
     //! Construct a ReserveDestination object. This does NOT reserve an address yet
-    explicit ReserveDestination(CWallet* pwallet, OutputType type)
-      : pwallet(pwallet)
+    explicit ReserveDestination(const CWallet& wallet, OutputType type)
+      : wallet(wallet)
       , type(type) { }
 
     ReserveDestination(const ReserveDestination&) = delete;
@@ -253,7 +253,7 @@ int CalculateMaximumSignedInputSize(const CTxOut& txout, const CWallet& wallet, 
 class CWalletTx
 {
 private:
-    const CWallet& wallet;
+    const CWallet* pwallet;
 
     /** Constant used in hashBlock to indicate tx has been abandoned, only used at
      * serialization/deserialization to avoid ambiguity with conflicted.
@@ -324,13 +324,13 @@ public:
     mutable bool fInMempool;
     mutable CAmount nChangeCached;
 
-    CWalletTx(const CWallet& walletIn, CTransactionRef arg)
+    CWalletTx(const CWallet* pwalletIn, CTransactionRef arg)
         : tx(std::move(arg))
     {
         Init(pwalletIn);
     }
 
-    void Init(const CWallet& walletIn)
+    void Init(const CWallet* pwalletIn)
     {
         pwallet = pwalletIn;
         mapValue.clear();
@@ -449,7 +449,7 @@ public:
         m_is_cache_empty = true;
     }
 
-    void BindWallet(CWallet *pwalletIn)
+    void BindWallet(const CWallet *pwalletIn)
     {
         pwallet = pwalletIn;
         MarkDirty();
@@ -470,7 +470,7 @@ public:
     // Get the marginal bytes if spending the specified output from this transaction
     int GetSpendSize(unsigned int out, bool use_max_sig = false) const
     {
-        return CalculateMaximumSignedInputSize(tx->vout[out], pwallet, use_max_sig);
+        return CalculateMaximumSignedInputSize(tx->vout[out], *pwallet, use_max_sig);
     }
 
     void GetAmounts(std::list<COutputEntry>& listReceived,
@@ -1233,6 +1233,6 @@ public:
 // Use DummySignatureCreator, which inserts 71 byte signatures everywhere.
 // NOTE: this requires that all inputs must be in mapWallet (eg the tx should
 // be IsAllFromMe).
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wallet, bool use_max_sig = false) EXCLUSIVE_LOCKS_REQUIRED(wallet->cs_wallet);
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wallet, bool use_max_sig = false) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet);
 int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet& wallet, const std::vector<CTxOut>& txouts, bool use_max_sig = false);
 #endif // BITCOIN_WALLET_WALLET_H

@@ -6,7 +6,7 @@
 
 TransactionError FillPSBT(const CWallet& wallet, PartiallySignedTransaction& psbtx, bool& complete, int sighash_type, bool sign, bool bip32derivs)
 {
-    LOCK(pwallet->cs_wallet);
+    LOCK(wallet.cs_wallet);
     // Get all of the previous transactions
     complete = true;
     for (unsigned int i = 0; i < psbtx.tx->vin.size(); ++i) {
@@ -25,8 +25,8 @@ TransactionError FillPSBT(const CWallet& wallet, PartiallySignedTransaction& psb
         // If we have no utxo, grab it from the wallet.
         if (!input.non_witness_utxo && input.witness_utxo.IsNull()) {
             const uint256& txhash = txin.prevout.hash;
-            const auto it = pwallet->mapWallet.find(txhash);
-            if (it != pwallet->mapWallet.end()) {
+            const auto it = wallet.mapWallet.find(txhash);
+            if (it != wallet.mapWallet.end()) {
                 const CWalletTx& wtx = it->second;
                 // We only need the non_witness_utxo, which is a superset of the witness_utxo.
                 //   The signing code will switch to the smaller witness_utxo if this is ok.
@@ -55,7 +55,7 @@ TransactionError FillPSBT(const CWallet& wallet, PartiallySignedTransaction& psb
         }
         SignatureData sigdata;
         input.FillSignatureData(sigdata);
-        std::unique_ptr<SigningProvider> provider = pwallet->GetSigningProvider(script, sigdata);
+        std::unique_ptr<SigningProvider> provider = wallet.GetSigningProvider(script, sigdata);
         if (!provider) {
             complete = false;
             continue;
@@ -67,7 +67,7 @@ TransactionError FillPSBT(const CWallet& wallet, PartiallySignedTransaction& psb
     // Fill in the bip32 keypaths and redeemscripts for the outputs so that hardware wallets can identify change
     for (unsigned int i = 0; i < psbtx.tx->vout.size(); ++i) {
         const CTxOut& out = psbtx.tx->vout.at(i);
-        std::unique_ptr<SigningProvider> provider = pwallet->GetSigningProvider(out.scriptPubKey);
+        std::unique_ptr<SigningProvider> provider = wallet.GetSigningProvider(out.scriptPubKey);
         if (provider) {
             UpdatePSBTOutput(HidingSigningProvider(provider.get(), true, !bip32derivs), psbtx, i);
         }

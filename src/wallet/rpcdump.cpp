@@ -54,23 +54,23 @@ static std::string DecodeDumpString(const std::string &str) {
     return ret.str();
 }
 
-static bool GetWalletAddressesForKey(LegacyScriptPubKeyMan* spk_man, const CWallet& wallet, const CKeyID& keyid, std::string& strAddr, std::string& strLabel) EXCLUSIVE_LOCKS_REQUIRED(pwallet->cs_wallet)
+static bool GetWalletAddressesForKey(LegacyScriptPubKeyMan* spk_man, const CWallet& wallet, const CKeyID& keyid, std::string& strAddr, std::string& strLabel) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     bool fLabelFound = false;
     CKey key;
     spk_man->GetKey(keyid, key);
     for (const auto& dest : GetAllDestinationsForKey(key.GetPubKey())) {
-        if (pwallet->mapAddressBook.count(dest)) {
+        if (wallet.mapAddressBook.count(dest)) {
             if (!strAddr.empty()) {
                 strAddr += ",";
             }
             strAddr += EncodeDestination(dest);
-            strLabel = EncodeDumpString(pwallet->mapAddressBook.at(dest).name);
+            strLabel = EncodeDumpString(wallet.mapAddressBook.at(dest).name);
             fLabelFound = true;
         }
     }
     if (!fLabelFound) {
-        strAddr = EncodeDestination(GetDestinationForKey(key.GetPubKey(), pwallet->m_default_address_type));
+        strAddr = EncodeDestination(GetDestinationForKey(key.GetPubKey(), wallet.m_default_address_type));
     }
     return fLabelFound;
 }
@@ -675,11 +675,11 @@ UniValue importwallet(const JSONRPCRequest& request)
 
 UniValue dumpprivkey(const JSONRPCRequest& request)
 {
-    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
-    const CWallet& wallet = wallet.get();
-    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+    std::shared_ptr<CWallet> const sp_wallet = GetWalletForJSONRPCRequest(request);
+    if (!EnsureWalletIsAvailable(sp_wallet.get(), request.fHelp)) {
         return NullUniValue;
     }
+    const CWallet& wallet = *sp_wallet.get();
 
             RPCHelpMan{"dumpprivkey",
                 "\nReveals the private key corresponding to 'address'.\n"
@@ -697,12 +697,12 @@ UniValue dumpprivkey(const JSONRPCRequest& request)
                 },
             }.Check(request);
 
-    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*sp_wallet);
 
-    auto locked_chain = pwallet->chain().lock();
-    LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+    auto locked_chain = wallet.chain().lock();
+    LOCK2(wallet.cs_wallet, spk_man.cs_KeyStore);
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(&wallet);
 
     std::string strAddress = request.params[0].get_str();
     CTxDestination dest = DecodeDestination(strAddress);
@@ -723,11 +723,11 @@ UniValue dumpprivkey(const JSONRPCRequest& request)
 
 UniValue dumpwallet(const JSONRPCRequest& request)
 {
-    std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
-    const CWallet& wallet = wallet.get();
-    if (!EnsureWalletIsAvailable(pwallet, request.fHelp)) {
+    std::shared_ptr<CWallet> const sp_wallet = GetWalletForJSONRPCRequest(request);
+    if (!EnsureWalletIsAvailable(sp_wallet.get(), request.fHelp)) {
         return NullUniValue;
     }
+    const CWallet& wallet = *sp_wallet.get();
 
             RPCHelpMan{"dumpwallet",
                 "\nDumps all wallet keys in a human-readable format to a server-side file. This does not allow overwriting existing files.\n"
@@ -748,12 +748,12 @@ UniValue dumpwallet(const JSONRPCRequest& request)
                 },
             }.Check(request);
 
-    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*wallet);
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*sp_wallet.get());
 
-    auto locked_chain = pwallet->chain().lock();
-    LOCK2(pwallet->cs_wallet, spk_man.cs_KeyStore);
+    auto locked_chain = wallet.chain().lock();
+    LOCK2(wallet.cs_wallet, spk_man.cs_KeyStore);
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(&wallet);
 
     fs::path filepath = request.params[0].get_str();
     filepath = fs::absolute(filepath);
@@ -774,7 +774,7 @@ UniValue dumpwallet(const JSONRPCRequest& request)
 
     std::map<CKeyID, int64_t> mapKeyBirth;
     const std::map<CKeyID, int64_t>& mapKeyPool = spk_man.GetAllReserveKeys();
-    pwallet->GetKeyBirthTimes(*locked_chain, mapKeyBirth);
+    wallet.GetKeyBirthTimes(*locked_chain, mapKeyBirth);
 
     std::set<CScriptID> scripts = spk_man.GetCScripts();
 
@@ -814,7 +814,7 @@ UniValue dumpwallet(const JSONRPCRequest& request)
         CKey key;
         if (spk_man.GetKey(keyid, key)) {
             file << strprintf("%s %s ", EncodeSecret(key), strTime);
-            if (GetWalletAddressesForKey(&spk_man, pwallet, keyid, strAddr, strLabel)) {
+            if (GetWalletAddressesForKey(&spk_man, wallet, keyid, strAddr, strLabel)) {
                file << strprintf("label=%s", strLabel);
             } else if (keyid == seed_id) {
                 file << "hdseed=1";

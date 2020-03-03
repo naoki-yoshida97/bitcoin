@@ -155,17 +155,17 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
 {
     new_fee = total_fee;
 
-    auto locked_chain = wallet->chain().lock();
-    LOCK(wallet->cs_wallet);
+    auto locked_chain = wallet.chain().lock();
+    LOCK(wallet.cs_wallet);
     errors.clear();
-    auto it = wallet->mapWallet.find(txid);
-    if (it == wallet->mapWallet.end()) {
+    auto it = wallet.mapWallet.find(txid);
+    if (it == wallet.mapWallet.end()) {
         errors.push_back("Invalid or non-wallet transaction id");
         return Result::INVALID_ADDRESS_OR_KEY;
     }
     const CWalletTx& wtx = it->second;
 
-    Result result = PreconditionChecks(*wallet, wtx, errors);
+    Result result = PreconditionChecks(wallet, wtx, errors);
     if (result != Result::OK) {
         return result;
     }
@@ -174,7 +174,7 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
     // if there was no change output or multiple change outputs, fail
     int nOutput = -1;
     for (size_t i = 0; i < wtx.tx->vout.size(); ++i) {
-        if (wallet->IsChange(wtx.tx->vout[i])) {
+        if (wallet.IsChange(wtx.tx->vout[i])) {
             if (nOutput != -1) {
                 errors.push_back("Transaction has multiple change outputs");
                 return Result::WALLET_ERROR;
@@ -196,13 +196,13 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
     }
 
     // calculate the old fee and fee-rate
-    isminefilter filter = wallet->GetLegacyScriptPubKeyMan() && wallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) ? ISMINE_WATCH_ONLY : ISMINE_SPENDABLE;
+    isminefilter filter = wallet.GetLegacyScriptPubKeyMan() && wallet.IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) ? ISMINE_WATCH_ONLY : ISMINE_SPENDABLE;
     old_fee = wtx.GetDebit(filter) - wtx.tx->GetValueOut();
     CFeeRate nOldFeeRate(old_fee, txSize);
     // The wallet uses a conservative WALLET_INCREMENTAL_RELAY_FEE value to
     // future proof against changes to network wide policy for incremental relay
     // fee that our node may not be aware of.
-    CFeeRate nodeIncrementalRelayFee = wallet->chain().relayIncrementalFee();
+    CFeeRate nodeIncrementalRelayFee = wallet.chain().relayIncrementalFee();
     CFeeRate walletIncrementalRelayFee = CFeeRate(WALLET_INCREMENTAL_RELAY_FEE);
     if (nodeIncrementalRelayFee > walletIncrementalRelayFee) {
         walletIncrementalRelayFee = nodeIncrementalRelayFee;
@@ -214,7 +214,7 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
             FormatMoney(minTotalFee), FormatMoney(nOldFeeRate.GetFee(maxNewTxSize)), FormatMoney(nodeIncrementalRelayFee.GetFee(maxNewTxSize))));
         return Result::INVALID_PARAMETER;
     }
-    CAmount requiredFee = GetRequiredFee(*wallet, maxNewTxSize);
+    CAmount requiredFee = GetRequiredFee(wallet, maxNewTxSize);
     if (total_fee < requiredFee) {
         errors.push_back(strprintf("Insufficient totalFee (cannot be less than required fee %s)",
             FormatMoney(requiredFee)));
@@ -222,7 +222,7 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
     }
 
     // Check that in all cases the new fee doesn't violate maxTxFee
-     const CAmount max_tx_fee = wallet->m_default_max_tx_fee;
+     const CAmount max_tx_fee = wallet.m_default_max_tx_fee;
      if (new_fee > max_tx_fee) {
          errors.push_back(strprintf("Specified or calculated fee %s is too high (cannot be higher than -maxtxfee %s)",
                                FormatMoney(new_fee), FormatMoney(max_tx_fee)));
@@ -234,7 +234,7 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
     // This may occur if the user set TotalFee or paytxfee too low, if fallbackfee is too low, or, perhaps,
     // in a rare situation where the mempool minimum fee increased significantly since the fee estimation just a
     // moment earlier. In this case, we report an error to the user, who may use total_fee to make an adjustment.
-    CFeeRate minMempoolFeeRate = wallet->chain().mempoolMinFee();
+    CFeeRate minMempoolFeeRate = wallet.chain().mempoolMinFee();
     CFeeRate nNewFeeRate = CFeeRate(total_fee, maxNewTxSize);
     if (nNewFeeRate.GetFeePerK() < minMempoolFeeRate.GetFeePerK()) {
         errors.push_back(strprintf(
@@ -259,14 +259,14 @@ Result CreateTotalBumpTransaction(const CWallet& wallet, const uint256& txid, co
 
     // If the output would become dust, discard it (converting the dust to fee)
     poutput->nValue -= nDelta;
-    if (poutput->nValue <= GetDustThreshold(*poutput, GetDiscardRate(*wallet))) {
-        wallet->WalletLogPrintf("Bumping fee and discarding dust output\n");
+    if (poutput->nValue <= GetDustThreshold(*poutput, GetDiscardRate(wallet))) {
+        wallet.WalletLogPrintf("Bumping fee and discarding dust output\n");
         new_fee += poutput->nValue;
         mtx.vout.erase(mtx.vout.begin() + nOutput);
     }
 
     // Mark new tx not replaceable, if requested.
-    if (!coin_control.m_signal_bip125_rbf.get_value_or(wallet->m_signal_rbf)) {
+    if (!coin_control.m_signal_bip125_rbf.get_value_or(wallet.m_signal_rbf)) {
         for (auto& input : mtx.vin) {
             if (input.nSequence < 0xfffffffe) input.nSequence = 0xfffffffe;
         }
@@ -316,7 +316,7 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
     if (coin_control.m_feerate) {
         // The user provided a feeRate argument.
         // We calculate this here to avoid compiler warning on the cs_wallet lock
-        const int64_t maxTxSize = CalculateMaximumSignedTxSize(*wtx.tx, &wallet);
+        const int64_t maxTxSize = CalculateMaximumSignedTxSize(*wtx.tx, wallet);
         Result res = CheckFeeRate(wallet, wtx, *new_coin_control.m_feerate, maxTxSize, errors);
         if (res != Result::OK) {
             return res;
