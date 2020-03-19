@@ -1763,7 +1763,9 @@ static bool WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationSt
             return AbortNode(state, "Failed to write undo data");
         // rev files are written in block height order, whereas blk files are written as blocks come in (often out of order)
         // we want to flush the rev (undo) file once we've written the last block, which is indicated by the last height
-        // in the block file info as below
+        // in the block file info as below; note that this does not catch the case where the undo writes are keeping up
+        // with the block writes (usually when a synced up node is getting newly mined blocks) -- this case is caught in
+        // the FindBlockPos function
         if (_pos.nFile < nLastBlockFile && static_cast<uint32_t>(pindex->nHeight) == vinfoBlockFile[_pos.nFile].nHeightLast) {
             FlushUndoFile(_pos.nFile, true);
         }
@@ -3232,6 +3234,12 @@ static bool FindBlockPos(FlatFilePos &pos, unsigned int nAddSize, unsigned int n
 
     if (!fKnown) {
         while (vinfoBlockFile[nFile].nSize + nAddSize >= MAX_BLOCKFILE_SIZE) {
+            // when the undo file is keeping up with the block file, we flush it explicitly, here
+            // when it is lagging behind (more blocks arrive than are being connected), we let the
+            // undo block write case handle it
+            if (vinfoBlockFile[nFile].nHeightLast == ChainActive().Tip()->nHeight) {
+                FlushUndoFile(nFile, true);
+            }
             nFile++;
             if (vinfoBlockFile.size() <= nFile) {
                 vinfoBlockFile.resize(nFile + 1);
