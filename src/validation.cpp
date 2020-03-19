@@ -1560,8 +1560,20 @@ bool CheckInputScripts(const CTransaction& tx, TxValidationState &state, const C
     return true;
 }
 
+static std::set<int> unflushed_undo_files;
+
+static inline void print_unflushed() {
+    std::string s = "[";
+    for (auto i : unflushed_undo_files) {
+        s += strprintf("%s%d", s == "[" ? "" : " ", i);
+    }
+    LogPrintf("unflushed undo: %s]\n", s);
+}
+
 static bool UndoWriteToDisk(const CBlockUndo& blockundo, FlatFilePos& pos, const uint256& hashBlock, const CMessageHeader::MessageStartChars& messageStart)
 {
+    unflushed_undo_files.insert(pos.nFile);
+
     // Open history file to append
     CAutoFile fileout(OpenUndoFile(pos), SER_DISK, CLIENT_VERSION);
     if (fileout.IsNull())
@@ -1733,9 +1745,14 @@ DisconnectResult CChainState::DisconnectBlock(const CBlock& block, const CBlockI
 
 static void FlushUndoFile(int block_file, bool finalize = false)
 {
+    if (finalize) LogPrintf("finalize undo %d\n", block_file);
     FlatFilePos undo_pos_old(block_file, vinfoBlockFile[block_file].nUndoSize);
     if (!UndoFileSeq().Flush(undo_pos_old, finalize)) {
         AbortNode("Flushing undo file to disk failed. This is likely the result of an I/O error.");
+    }
+    if (finalize) {
+        unflushed_undo_files.erase(block_file);
+        print_unflushed();
     }
 }
 
@@ -1748,6 +1765,7 @@ static void FlushBlockFile(bool fFinalize = false)
     }
     // the undo file is actually finalized at a later stage, but we do want to flush it along with the block file
     if (!fFinalize) FlushUndoFile(nLastBlockFile);
+    print_unflushed();
 }
 
 static bool FindUndoPos(BlockValidationState &state, int nFile, FlatFilePos &pos, unsigned int nAddSize);
@@ -1767,6 +1785,7 @@ static bool WriteUndoDataForBlock(const CBlockUndo& blockundo, BlockValidationSt
         // with the block writes (usually when a synced up node is getting newly mined blocks) -- this case is caught in
         // the FindBlockPos function
         if (_pos.nFile < nLastBlockFile && static_cast<uint32_t>(pindex->nHeight) == vinfoBlockFile[_pos.nFile].nHeightLast) {
+            LogPrintf("*** FLUSH UNDO FILE %d ***\n", _pos.nFile);
             FlushUndoFile(_pos.nFile, true);
         }
 
@@ -3237,6 +3256,10 @@ static bool FindBlockPos(FlatFilePos &pos, unsigned int nAddSize, unsigned int n
             // when the undo file is keeping up with the block file, we flush it explicitly, here
             // when it is lagging behind (more blocks arrive than are being connected), we let the
             // undo block write case handle it
+            LogPrintf("iterating nFile: last height = %d; chain tip height = %d -> %s\n",
+                vinfoBlockFile[nFile].nHeightLast,
+                ChainActive().Tip()->nHeight,
+                vinfoBlockFile[nFile].nHeightLast == ChainActive().Tip()->nHeight ? "FLUSH UNDO FILE" : "DO NOT FLUSH UNDO FILE");
             if (vinfoBlockFile[nFile].nHeightLast == ChainActive().Tip()->nHeight) {
                 FlushUndoFile(nFile, true);
             }
