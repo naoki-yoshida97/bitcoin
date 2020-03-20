@@ -1764,6 +1764,7 @@ static void FlushBlockFile(bool fFinalize = false)
         AbortNode("Flushing block file to disk failed. This is likely the result of an I/O error.");
     }
     // the undo file is actually finalized at a later stage, but we do want to flush it along with the block file
+    // in non-finalizing flushes
     if (!fFinalize) FlushUndoFile(nLastBlockFile);
     print_unflushed();
 }
