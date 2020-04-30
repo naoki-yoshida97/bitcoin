@@ -94,6 +94,8 @@ static const unsigned int DEFAULT_CHECKLEVEL = 3;
 static const uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES = 550 * 1024 * 1024;
 /** Minimum size of a witness commitment structure. Defined in BIP 141. **/
 static constexpr size_t MINIMUM_WITNESS_COMMITMENT{38};
+/** Index marker for when no witness commitment is present in a coinbase transaction. */
+static constexpr int NO_WITNESS_COMMITMENT{-1};
 
 struct BlockHasher
 {
@@ -331,6 +333,9 @@ bool IsWitnessEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& pa
 
 /** Compute at which vout of the block's coinbase transaction the witness commitment occurs, or -1 if not found */
 int GetWitnessCommitmentIndex(const CBlock& block);
+
+/** Compute at which vout of the given coinbase transaction the witness commitment occurs, or -1 if not found */
+template<typename T> int GetWitnessCommitmentIndex(const T& tx);
 
 /** Update uncommitted block structures (currently: only the witness reserved value). This is safe for submitted blocks. */
 void UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams);
