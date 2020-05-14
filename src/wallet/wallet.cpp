@@ -28,6 +28,7 @@
 #include <util/moneystr.h>
 #include <util/rbf.h>
 #include <util/string.h>
+#include <util/system.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
 #include <wallet/fees.h>
@@ -2514,7 +2515,7 @@ SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkh
     return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
 }
 
-bool CWallet::FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nChangePosInOut, bilingual_str& error, bool lockUnspents, const std::set<int>& setSubtractFeeFromOutputs, CCoinControl coinControl)
+bool CWallet::FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nChangePosInOut, bilingual_str& error, int64_t autolock, const std::set<int>& setSubtractFeeFromOutputs, CCoinControl coinControl)
 {
     std::vector<CRecipient> vecSend;
 
@@ -2535,6 +2536,9 @@ bool CWallet::FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nC
     // CreateTransaction call and LockCoin calls (when lockUnspents is true).
     LOCK(cs_wallet);
 
+    UnlockExpiredCoins();
+    if (autolock == 1) autolock = GetTimeMillis() + 60 * 10 * 1000; // bool case -> lock for 10 minutes
+
     CTransactionRef tx_new;
     if (!CreateTransaction(vecSend, tx_new, nFeeRet, nChangePosInOut, error, coinControl, false)) {
         return false;
@@ -2551,15 +2555,18 @@ bool CWallet::FundTransaction(CMutableTransaction& tx, CAmount& nFeeRet, int& nC
     }
 
     // Add new txins while keeping original txin scriptSig/order.
+    std::set<COutPoint> lockset;
     for (const CTxIn& txin : tx_new->vin) {
         if (!coinControl.IsSelected(txin.prevout)) {
             tx.vin.push_back(txin);
 
-            if (lockUnspents) {
-                LockCoin(txin.prevout);
+            if (autolock) {
+                lockset.insert(txin.prevout);
             }
         }
     }
+
+    if (autolock) LockCoinsWithExpiration(lockset, autolock);
 
     return true;
 }
@@ -3483,6 +3490,24 @@ void CWallet::ListLockedCoins(std::vector<COutPoint>& vOutpts) const
          it != setLockedCoins.end(); it++) {
         COutPoint outpt = (*it);
         vOutpts.push_back(outpt);
+    }
+}
+
+void CWallet::LockCoinsWithExpiration(const std::set<COutPoint>& coins, int64_t expiration_millis)
+{
+    AssertLockHeld(cs_wallet);
+    util::insert(m_coinlocks[expiration_millis], coins);
+    util::insert(setLockedCoins, coins);
+}
+
+void CWallet::UnlockExpiredCoins(void)
+{
+    AssertLockHeld(cs_wallet);
+    int64_t threshold = GetTimeMillis();
+    for (auto it = m_coinlocks.begin(); it != m_coinlocks.end() && it->first < threshold; it = m_coinlocks.erase(it)) {
+        for (const auto& coin : it->second) {
+            setLockedCoins.erase(coin);
+        }
     }
 }
 
