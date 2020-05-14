@@ -3006,7 +3006,7 @@ void FundTransaction(CWallet* const pwallet, CMutableTransaction& tx, CAmount& f
 
     CCoinControl coinControl;
     change_position = -1;
-    bool lockUnspents = false;
+    int64_t autolock = 0;
     UniValue subtractFeeFromOutputs;
     std::set<int> setSubtractFeeFromOutputs;
 
@@ -3057,8 +3057,16 @@ void FundTransaction(CWallet* const pwallet, CMutableTransaction& tx, CAmount& f
 
         coinControl.fAllowWatchOnly = ParseIncludeWatchonly(options["includeWatching"], *pwallet);
 
-        if (options.exists("lockUnspents"))
-            lockUnspents = options["lockUnspents"].get_bool();
+        if (options.exists("lockUnspents") && options["lockUnspents"].get_bool()) {
+            autolock = GetTimeMillis() + 60 * 10 * 1000; // default 10 min lock
+        }
+
+        if (options.exists("autolock")) {
+            if (autolock) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "lockUnspents and autolock cannot be used simultaneously");
+            }
+            autolock = GetTimeMillis() + 1000 * options["autolock"].get_int();
+        }
 
         if (options.exists("feeRate"))
         {
@@ -3111,7 +3119,7 @@ void FundTransaction(CWallet* const pwallet, CMutableTransaction& tx, CAmount& f
 
     bilingual_str error;
 
-    if (!pwallet->FundTransaction(tx, fee_out, change_position, error, lockUnspents, setSubtractFeeFromOutputs, coinControl)) {
+    if (!pwallet->FundTransaction(tx, fee_out, change_position, error, autolock, setSubtractFeeFromOutputs, coinControl)) {
         throw JSONRPCError(RPC_WALLET_ERROR, error.original);
     }
 }
@@ -3148,6 +3156,7 @@ static UniValue fundrawtransaction(const JSONRPCRequest& request)
                                                           "Only solvable inputs can be used. Watch-only destinations are solvable if the public key and/or output script was imported,\n"
                                                           "e.g. with 'importpubkey' or 'importmulti' with the 'pubkeys' or 'desc' field."},
                             {"lockUnspents", RPCArg::Type::BOOL, /* default */ "false", "Lock selected unspent outputs"},
+                            {"autolock", RPCArg::Type::NUM, /* default */ "0", "Time in seconds to lock inputs of this transaction, preventing them from being used for that amount of time in subsequent funding (replaces lockUnspents)"},
                             {"feeRate", RPCArg::Type::AMOUNT, /* default */ "not set: makes wallet determine the fee", "Set a specific fee rate in " + CURRENCY_UNIT + "/kB"},
                             {"subtractFeeFromOutputs", RPCArg::Type::ARR, /* default */ "empty array", "The integers.\n"
                             "                              The fee will be equally deducted from the amount of each specified output.\n"
@@ -4133,6 +4142,7 @@ UniValue walletcreatefundedpsbt(const JSONRPCRequest& request)
                             {"change_type", RPCArg::Type::STR, /* default */ "set by -changetype", "The output type to use. Only valid if changeAddress is not specified. Options are \"legacy\", \"p2sh-segwit\", and \"bech32\"."},
                             {"includeWatching", RPCArg::Type::BOOL, /* default */ "true for watch-only wallets, otherwise false", "Also select inputs which are watch only"},
                             {"lockUnspents", RPCArg::Type::BOOL, /* default */ "false", "Lock selected unspent outputs"},
+                            {"autolock", RPCArg::Type::NUM, /* default */ "0", "Time in seconds to lock inputs of this transaction, preventing them from being used for that amount of time in subsequent funding (replaces lockUnspents)"},
                             {"feeRate", RPCArg::Type::AMOUNT, /* default */ "not set: makes wallet determine the fee", "Set a specific fee rate in " + CURRENCY_UNIT + "/kB"},
                             {"subtractFeeFromOutputs", RPCArg::Type::ARR, /* default */ "empty array", "The outputs to subtract the fee from.\n"
                             "                              The fee will be equally deducted from the amount of each specified output.\n"
